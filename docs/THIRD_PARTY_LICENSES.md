@@ -4,15 +4,15 @@ Purpose: the owner sells this software as proprietary code. Every dependency mus
 
 ## Allowed licenses (production and development)
 
-MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD, PostgreSQL License, Unlicense/CC0 (public domain), OFL-1.1 (fonts only).
+MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD, PostgreSQL License, Unlicense/CC0 (public domain), OFL-1.1 (fonts only), Python-2.0 (ADR-021).
 
-## Allowed licenses (devDependencies only — ADR-016)
+## Allowed licenses (devDependencies only — ADR-016, ADR-021)
 
-BlueOak-1.0.0, Python-2.0. Permitted strictly for tooling and developer dependencies; forbidden in production dependencies.
+BlueOak-1.0.0, CC-BY-4.0 (browser/compatibility data assets in tooling). Permitted strictly for tooling and developer dependencies; forbidden in production dependencies.
 
 ## Needs owner approval before use
 
-MPL-2.0, CC-BY (non-code assets), any dual-licensed package (state which license is chosen).
+MPL-2.0, CC-BY-3.0, any dual-licensed package (state which license is chosen).
 
 ## Forbidden
 
@@ -36,8 +36,32 @@ GPL (any version), LGPL, AGPL, SSPL, BUSL, Commons Clause, Elastic License, "sou
 | lint-staged                      | 16.4.0  | MIT        | root               | Run linters on staged files                          | 2026-09-30   |
 | @commitlint/cli                  | 19.8.1  | MIT        | root               | Commit message linting                               | 2026-09-30   |
 | @commitlint/config-conventional  | 19.8.1  | MIT        | root               | Conventional Commits config                          | 2026-09-30   |
-| zod                              | 3.25.67 | MIT        | shared, api        | Schema validation                                    | 2026-09-30   |
-| @types/node                      | 22.x    | MIT        | api                | Node.js type definitions                             | 2026-09-30   |
+| zod                              | 4.6.5   | MIT        | shared, api        | Schema validation (upgraded to Zod 4 per ADR-018)    | 2026-09-30   |
+| @types/node                      | 26.x    | MIT        | api                | Node.js type definitions                             | 2026-09-30   |
+| @nestjs/common                   | 11.2.7  | MIT        | api                | NestJS core framework common utilities               | 2026-09-30   |
+| @nestjs/core                     | 11.2.7  | MIT        | api                | NestJS core application kernel                       | 2026-09-30   |
+| @nestjs/platform-express         | 11.2.7  | MIT        | api                | NestJS HTTP adapter on Express                       | 2026-09-30   |
+| @nestjs/swagger                  | 11.4.7  | MIT        | api                | OpenAPI / Swagger documentation                      | 2026-09-30   |
+| swagger-ui-express               | 5.0.1   | MIT        | api                | Swagger UI middleware                                | 2026-09-30   |
+| @nestjs/throttler                | 6.7.1   | MIT        | api                | Rate limiting guard and middleware                   | 2026-09-30   |
+| @prisma/client                   | 6.19.3  | Apache-2.0 | api                | Prisma ORM runtime database client                   | 2026-09-30   |
+| prisma                           | 6.19.3  | Apache-2.0 | api                | Prisma ORM CLI tooling (dev)                         | 2026-09-30   |
+| helmet                           | 8.3.0   | MIT        | api                | HTTP security headers middleware                     | 2026-09-30   |
+| nestjs-pino                      | 5.2.1   | MIT        | api                | NestJS integration for Pino structured logger        | 2026-09-30   |
+| pino                             | 10.3.1  | MIT        | api                | High-performance structured JSON logger              | 2026-09-30   |
+| pino-http                        | 11.0.0  | MIT        | api                | HTTP request logging middleware                      | 2026-09-30   |
+| pino-pretty                      | 13.1.3  | MIT        | api                | Dev log pretty printing (dev)                        | 2026-09-30   |
+| nestjs-zod                       | 5.5.0   | MIT        | api                | NestJS integration with Zod DTOs and validation      | 2026-09-30   |
+| reflect-metadata                 | 0.2.2   | Apache-2.0 | api                | TypeScript decorator metadata polyfill               | 2026-09-30   |
+| rxjs                             | 7.8.2   | Apache-2.0 | api                | Reactive extensions for JavaScript (NestJS dep)      | 2026-09-30   |
+| @nestjs/cli                      | 11.0.24 | MIT        | api                | NestJS build & dev CLI (dev)                         | 2026-09-30   |
+| @nestjs/testing                  | 11.2.7  | MIT        | api                | NestJS test utilities (dev)                          | 2026-09-30   |
+| jest                             | 29.7.0  | MIT        | api                | Test runner (dev)                                    | 2026-09-30   |
+| ts-jest                          | 29.4.14 | MIT        | api                | TypeScript preprocessor for Jest (dev)               | 2026-09-30   |
+| @types/jest                      | 29.5.14 | MIT        | api                | Jest TypeScript definitions (dev)                    | 2026-09-30   |
+| supertest                        | 7.3.0   | MIT        | api                | HTTP integration test assertions (dev)               | 2026-09-30   |
+| @types/supertest                 | 6.0.3   | MIT        | api                | Supertest TypeScript definitions (dev)               | 2026-09-30   |
+| @types/express                   | 5.0.6   | MIT        | api                | Express TypeScript definitions (dev)                 | 2026-09-30   |
 
 ## Notes
 

@@ -118,6 +118,82 @@ Entry format: `ADR-NNN — Title` · Status · Date · Decision · Reason · Con
 **Reason:** Build, lint, and commit-validation tooling (`minimatch` under BlueOak-1.0.0, `argparse` under Python-2.0) are developer-only dependencies that are not included in production runtime artifacts. Permitting these permissive licenses for tooling preserves the proprietary licensing boundary of the hospital application while enabling modern development tooling.
 **Consequences:** `pnpm check:licenses` scans the full tree (prod + dev), cross-referencing production dependencies against `policy.allowed` only, and flagging an error if any production dependency uses an `allowedDev` license. `docs/THIRD_PARTY_LICENSES.md` documents both tiers.
 
+## ADR-017 — Zod 3 for schema validation
+
+**Status:** Superseded by ADR-018
+**Date:** 2026-09-30
+**Decision:** Standardize on Zod 3 (`^3.25.67`) across all workspaces (`packages/shared`, `apps/api`, and `apps/web`), rather than adopting Zod 4.
+**Reason:** Initial assessment assumed limited ecosystem support. Superseded once verified that `nestjs-zod@5.5.0` supports Zod 4 natively.
+**Consequences:** Superseded by ADR-018.
+
+## ADR-018 — Upgrade to Zod 4 across all workspaces
+
+**Status:** Accepted
+**Date:** 2026-09-30
+**Decision:** Standardize on Zod 4 (`^4.6.5`) across `packages/shared`, `apps/api`, and `apps/web`.
+**Reason:**
+
+1. Ecosystem verification confirmed that `nestjs-zod@5.5.0` natively targets Zod 4, and `@hookform/resolvers@5.1.0+` fully supports Zod 4 for the upcoming frontend.
+2. Adopting Zod 4 at the foundation stage (F2) eliminates future breaking migration costs when dozens of clinical domain schemas are built.
+3. In Zod 4, object schemas preserve strict stripping and checking semantics (`z.object({...}).strict()` or `.strip()`), fulfilling rule 01 and rule 02 input boundaries.
+   **Consequences:** Supersedes ADR-017. All DTO schemas in `packages/shared` use Zod 4. `apps/api` uses `nestjs-zod` with Zod 4 for controller parameter validation and OpenAPI schema extraction.
+
+## ADR-019 — Prisma 6.19.3, zero-model bootstrap, and dual DB URLs
+
+**Status:** Accepted
+**Date:** 2026-09-30
+**Decision:**
+
+1. Pin Prisma ORM to `6.19.3` (`@prisma/client` and `prisma`). Do not use Prisma 7 or 8 (currently release candidates / early previews with breaking changes).
+2. Prisma 6 is fully compatible with NestJS running under CommonJS (`module: "commonjs"`).
+3. Bootstrap the database with zero models: verify that `prisma generate` and `$queryRaw` work with an empty schema.
+4. Separate migration credentials from runtime credentials:
+   - `schema.prisma` configures `url = env("DATABASE_MIGRATION_URL")` and `shadowDatabaseUrl = env("SHADOW_DATABASE_URL")`. Migration commands (`prisma migrate dev`, `prisma migrate deploy`, `prisma migrate reset`) always run under the privileged `hms_owner` role.
+   - At runtime, `PrismaService` initializes `PrismaClient` with `datasources: { db: { url: envConfig.DATABASE_URL } }`, ensuring the running NestJS application strictly operates under the least-privilege `hms_app` role.
+5. In root `package.json`, `pnpm.onlyBuiltDependencies` is strictly limited to `@prisma/client`, `@prisma/engines`, and `prisma`. Telemetry (`@scarf/scarf`) is blocked. `argon2` is deferred to F4.
+   **Consequences:** Clear architectural separation between schema migrations (`hms_owner`) and application runtime (`hms_app`).
+
+## ADR-020 — Validation, response serialization, and OpenAPI with nestjs-zod v5
+
+**Status:** Accepted
+**Date:** 2026-09-30
+**Decision:**
+
+1. Keep `packages/shared` 100% free of NestJS dependencies: it exports pure Zod schemas and inferred TypeScript types only.
+2. `apps/api` creates controller DTO classes using `createZodDto` from `nestjs-zod`.
+3. Validation uses a global `ZodValidationPipe` created via `createZodValidationPipe({ strictSchemaDeclaration: true })` to guarantee that any endpoint parameter lacking a validated DTO is caught and rejected immediately.
+4. Validation errors are formatted into the standardized error response `{ error: { code: 'VALIDATION_ERROR', message: 'Validation failed', details: [...] } }` matching Rule 01.
+5. Response serialization is handled by a global `ZodSerializerInterceptor` from `nestjs-zod`, ensuring response shapes are validated and stripped according to declared response schemas.
+6. OpenAPI/Swagger document post-processing uses `cleanupOpenApiDoc` from `nestjs-zod` (the v5 API replacing v4's `patchNestjsSwagger`).
+   **Consequences:** Clean separation of concerns between shared schemas and API framework integration. Strict type safety and schema validation enforced at runtime and documented in OpenAPI.
+
+## ADR-021 — Third-party license approvals for Python-2.0 and CC-BY-4.0
+
+**Status:** Accepted
+**Date:** 2026-09-30
+**Decision:**
+The OWNER approved Python-2.0 (production) and CC-BY-4.0 (dev tooling only) on 2026-09-30.
+
+1. Approve `Python-2.0` as an allowed license for production dependencies. `@nestjs/swagger` depends on `js-yaml` -> `argparse` (licensed under Python-2.0). Python-2.0 is an OSI-approved, permissive, non-copyleft license compatible with proprietary commercial software.
+2. Approve `CC-BY-4.0` in `allowedDev` for developer dependencies only. `jest` depends on `@babel/helper-compilation-targets` -> `browserslist` -> `caniuse-lite` (licensed under CC-BY-4.0 for browser support data).
+   **Reason:** Both licenses are permissive, standard components of the NestJS and Jest ecosystems, and do not impose any copyleft or source-disclosure obligations on the hospital management system.
+   **Consequences:** Recorded in `docs/THIRD_PARTY_LICENSES.md` and enforced by `scripts/license-policy.json`.
+
+## ADR-022 — Dependency override for deepmerge-ts (GHSA-ggr8-5vv4-36mx)
+
+**Status:** Accepted
+**Date:** 2026-09-30
+**Decision:** Configure a pnpm dependency override in root `package.json`: `"pnpm.overrides": { "deepmerge-ts": "^8.0.0" }`.
+**Reason:**
+
+1. **Advisory ID:** GHSA-ggr8-5vv4-36mx (stack exhaustion when merging recursive object graphs in deepmerge-ts).
+2. **Declared dependency:** `nestjs-zod@5.5.0` specifies `"deepmerge-ts": "^7.1.5"` in its dependencies.
+3. **Investigation of 7.x line:** Evaluated whether a patched 7.x release exists. Although `7.1.6` exists on npm, advisory GHSA-ggr8-5vv4-36mx explicitly classifies all versions `< 8.0.0` as vulnerable, with patched versions starting at `>= 8.0.0`. Testing `7.1.6` fails `pnpm audit --audit-level=high`. Therefore, an override to `^8.0.0` is strictly necessary to clear the high-severity advisory.
+4. **Safety of override:** `deepmerge-ts` v8 maintains runtime API compatibility for the object-merging functionality consumed by `nestjs-zod`.
+5. **Validation:** Exercised and tested via `cleanupOpenApiDoc` and `SwaggerModule.createDocument` in `apps/api/test/swagger-csp.e2e-spec.ts`.
+6. **Removal condition:** Remove this override when `nestjs-zod` publishes an updated release specifying `deepmerge-ts >= 8.0.0`.
+   **Consequences:** High-severity audit vulnerability is resolved; OpenAPI schema generation is tested and working properly.
+
 ---
 
 ## Template for new entries

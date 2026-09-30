@@ -9,9 +9,13 @@
 #   hms_app   — runtime role with CONNECT + USAGE only; table grants are added
 #               per-migration so hms_app never gets blanket privileges
 #
-# Databases: hms_dev, hms_test (both owned by hms_owner)
+# Databases:
+#   hms_dev, hms_test           — main development and test databases
+#   hms_shadow, hms_test_shadow — Prisma shadow databases for migration diffing
+#   All owned by hms_owner.
 #
 # Passwords come from environment variables set in docker-compose.yml.
+# Extensions (pg_trgm, unaccent) are created by Prisma migrations, not here.
 set -euo pipefail
 
 echo "=== HMS: Creating roles and databases ==="
@@ -23,15 +27,18 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres <<-EOSQL
   -- Role: hms_app (runtime, least-privilege)
   CREATE ROLE hms_app WITH LOGIN PASSWORD '${HMS_APP_PASSWORD}' NOSUPERUSER NOCREATEDB NOCREATEROLE;
 
-  -- Database: hms_dev
+  -- Databases: main
   CREATE DATABASE hms_dev OWNER hms_owner;
-
-  -- Database: hms_test
   CREATE DATABASE hms_test OWNER hms_owner;
+
+  -- Databases: Prisma shadow (used by prisma migrate dev for diffing)
+  CREATE DATABASE hms_shadow OWNER hms_owner;
+  CREATE DATABASE hms_test_shadow OWNER hms_owner;
 EOSQL
 
 # Configure each database: revoke public, grant connect to hms_app,
-# set default search path and privileges
+# set default search path and privileges.
+# Shadow databases only need owner access (no hms_app grants).
 for db in hms_dev hms_test; do
   psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$db" <<-EOSQL
     -- Revoke default public access
@@ -51,6 +58,15 @@ for db in hms_dev hms_test; do
       REVOKE ALL ON TABLES FROM hms_app;
     ALTER DEFAULT PRIVILEGES FOR ROLE hms_owner IN SCHEMA public
       REVOKE ALL ON SEQUENCES FROM hms_app;
+EOSQL
+done
+
+# Shadow databases: just revoke public access, set owner
+for db in hms_shadow hms_test_shadow; do
+  psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$db" <<-EOSQL
+    REVOKE ALL ON DATABASE ${db} FROM PUBLIC;
+    REVOKE ALL ON SCHEMA public FROM PUBLIC;
+    ALTER SCHEMA public OWNER TO hms_owner;
 EOSQL
 done
 

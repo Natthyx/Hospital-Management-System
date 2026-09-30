@@ -4,21 +4,25 @@ Detailed spec for milestones F1 to F8. Follow it exactly. If something is ambigu
 
 ## Environment variables
 
-| Variable                 | Default (dev)                                       | Notes                                 |
-| ------------------------ | --------------------------------------------------- | ------------------------------------- |
-| `NODE_ENV`               | `development`                                       | `development` / `test` / `production` |
-| `PORT`                   | `3000`                                              | API port                              |
-| `APP_ORIGIN`             | `http://localhost:5173`                             | Used for Origin check                 |
-| `DATABASE_URL`           | `postgresql://hms_app:...@localhost:5432/hms_dev`   | Runtime, least-privilege role         |
-| `DATABASE_MIGRATION_URL` | `postgresql://hms_owner:...@localhost:5432/hms_dev` | Migrations only                       |
-| `SESSION_IDLE_MINUTES`   | `15`                                                |                                       |
-| `SESSION_ABSOLUTE_HOURS` | `12`                                                |                                       |
-| `LOGIN_MAX_FAILURES`     | `5`                                                 |                                       |
-| `LOGIN_LOCK_MINUTES`     | `15`                                                |                                       |
-| `COOKIE_SECURE`          | `false` in dev, `true` in production                |                                       |
-| `LOG_LEVEL`              | `info`                                              |                                       |
-| `HOSPITAL_TIMEZONE`      | `UTC`                                               | IANA name                             |
-| `DEFAULT_LOCALE`         | `en`                                                |                                       |
+| Variable                 | Default (dev)                                          | Notes                                 |
+| ------------------------ | ------------------------------------------------------ | ------------------------------------- |
+| `NODE_ENV`               | `development`                                          | `development` / `test` / `production` |
+| `PORT`                   | `3000`                                                 | API port                              |
+| `APP_ORIGIN`             | `http://localhost:5173`                                | Used for Origin check                 |
+| `DATABASE_URL`           | `postgresql://hms_app:...@localhost:5432/hms_dev`      | Runtime, least-privilege role         |
+| `DATABASE_MIGRATION_URL` | `postgresql://hms_owner:...@localhost:5432/hms_dev`    | Migrations only                       |
+| `SHADOW_DATABASE_URL`    | `postgresql://hms_owner:...@localhost:5432/hms_shadow` | Prisma shadow DB for migrate dev      |
+| `SESSION_IDLE_MINUTES`   | `15`                                                   |                                       |
+| `SESSION_ABSOLUTE_HOURS` | `12`                                                   |                                       |
+| `LOGIN_MAX_FAILURES`     | `5`                                                    |                                       |
+| `LOGIN_LOCK_MINUTES`     | `15`                                                   |                                       |
+| `COOKIE_SECURE`          | `false` in dev, `true` in production                   |                                       |
+| `LOG_LEVEL`              | `info`                                                 |                                       |
+| `HOSPITAL_TIMEZONE`      | `UTC`                                                  | IANA name                             |
+| `DEFAULT_LOCALE`         | `en`                                                   |                                       |
+| `SWAGGER_ENABLED`        | `false`                                                | Enables /api/docs (dev only)          |
+| `THROTTLE_TTL_MS`        | `60000`                                                | Throttler window in ms                |
+| `THROTTLE_LIMIT`         | `100`                                                  | Max requests per throttler window     |
 
 ## F1 — Repo and tooling
 
@@ -37,13 +41,26 @@ Acceptance: fresh clone, `pnpm install`, `pnpm db:up`, `pnpm lint`, `pnpm typech
 
 Tasks:
 
-- NestJS app with pino logging, request-ID middleware, global validation pipe (Zod), global exception filter (error format from rule 01), `helmet`, throttler.
-- `PrismaService`; Prisma schema; migration tooling using `DATABASE_MIGRATION_URL`.
-- `GET /api/v1/health` (public): returns status and DB connectivity, no sensitive data.
-- Swagger/OpenAPI at `/api/docs` (disabled in production by default via config).
-- Test setup: Jest, Supertest, real `hms_test` database, helpers and factories.
+- NestJS app with pino logging, request-ID correlation (`x-request-id` header validation with `^[a-zA-Z0-9_-]{1,64}$`, UUID fallback, log and error envelope correlation), global validation pipe (Zod with `strictSchemaDeclaration: true`), global exception filter with `{ error: { code, message, details?, requestId } }`, `ResponseEnvelopeInterceptor` wrapping success in `{ data }`, Helmet security headers with strict CSP (`'unsafe-inline'` allowed only on `/api/docs` in non-production), Throttler rate limiting.
+- `PrismaService`; Prisma schema; migration tooling using `DATABASE_MIGRATION_URL` via `scripts/prisma.mjs`; `db:reset` safety guard (`scripts/db-reset-guard.mjs`) ensuring reset only executes in `development` against local hosts (`localhost`, `127.0.0.1`, `::1`) and allowlisted databases (`hms_dev`, `hms_test`).
+- `GET /api/v1/health` (public): returns `{ "data": { "status": "ok", "database": "connected" } }`. No timestamp, no internal connection or host details leaked on failure. No `/health/liveness` or `/health/readiness` probe endpoints. Health module located at `apps/api/src/modules/health/`.
+- Swagger/OpenAPI at `/api/docs`: enabled only in development when `SWAGGER_ENABLED=true` (defaults to false when unset).
+- Scripts: `pnpm db:migrate` runs migrations via `node scripts/prisma.mjs migrate deploy` with root `.env` loaded without symlinks; `pnpm db:reset` runs through `scripts/db-reset.mjs` with safety guard verification.
+- Test suite (12 suites, 57 tests):
+  1. `test/db-reset-guard.spec.ts`: unit tests for reset guard (production env, non-local hosts, invalid db name, malformed URLs, shadow DB host, allowed cases).
+  2. `test/health.e2e-spec.ts`: 200 data envelope without timestamp, 404 on removed probe routes, 503 on database disconnection without credential leakage, recovery to 200 without app restart.
+  3. `test/request-id.e2e-spec.ts`: valid client `X-Request-Id` echoed in response header and error body, invalid format replaced with UUID v4, missing header generated as UUID v4.
+  4. `test/log-redaction.e2e-spec.ts`: verifies redaction of `Cookie`, `Authorization`, `X-CSRF-Token`, `Set-Cookie`, query string (`?q=...`), query object contents (`{}`), and request body. Fails if sensitive values leak.
+  5. `test/route-audit.spec.ts`: enumerates all registered routes; asserts each route declares `@Public()` or `@RequirePermission(...)`.
+  6. `test/security-guards.e2e-spec.ts`: default-deny returns 401 UNAUTHENTICATED on route without `@Public()`, strict Zod DTO returns 400 VALIDATION_FAILED listing unrecognized keys, route parameter without ZodDto rejected (strictSchemaDeclaration), error envelope requestId coverage across 400, 401, 403, 404, 429, 500, 503.
+  7. `test/swagger-csp.e2e-spec.ts`: `/api/docs` serves 200 in development when `SWAGGER_ENABLED=true`, 404 when disabled or in production; CSP relaxed only on `/api/docs` and strict elsewhere.
+  8. `test/database.integration.spec.ts`: connects as least-privilege `hms_app` role; tests `SELECT 1`, `pg_trgm`, `unaccent`, and verifies DDL (`CREATE TABLE`) is forbidden.
+  9. `src/common/filters/all-exceptions.filter.spec.ts`: unit tests for standard error envelopes and requestId formatting across exception types; logger silenced in tests.
+  10. `src/common/guards/default-deny.guard.spec.ts`: unit tests for `@Public()`, missing permission fail-closed, unauthenticated access rejection, and permission checking.
+  11. `src/common/pipes/zod-validation.pipe.spec.ts`: unit tests for Zod validation pipe and schema transformation.
+  12. `src/config/env.schema.spec.ts`: unit tests for Zod environment variable parsing and fail-fast validation.
 
-Acceptance: API boots, health returns OK, error format verified by tests, integration test harness works.
+Acceptance: API boots, health returns `{ data: { status: "ok", database: "connected" } }`, error format `{ error: { code, message, details?, requestId } }` verified across all statuses, strict CSP enforced, zero symlinks required, all tests pass cleanly.
 
 ## F3 — Identity data model
 

@@ -6,21 +6,31 @@
     "node": ">=22.20.0",
     "pnpm": ">=10.28.0"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma"
+    ],
+    "overrides": {
+      "deepmerge-ts": "^8.0.0"
+    }
+  },
   "scripts": {
     "db:up": "docker compose --env-file .env -f docker/docker-compose.yml up -d --wait",
     "db:down": "docker compose --env-file .env -f docker/docker-compose.yml down",
-    "db:migrate": "echo 'ERROR: db:migrate not yet implemented (added in milestone F2)' && exit 1",
+    "db:migrate": "node scripts/prisma.mjs migrate deploy",
     "db:seed:required": "echo 'ERROR: db:seed:required not yet implemented (added in milestone F3)' && exit 1",
     "db:seed:dev": "echo 'ERROR: db:seed:dev not yet implemented (added in milestone F3)' && exit 1",
-    "db:reset": "echo 'ERROR: db:reset not yet implemented (added in milestone F2). Note: requires db:down -v to remove the volume first.' && exit 1",
-    "dev": "echo 'ERROR: dev not yet implemented (added in milestones F2 and F6)' && exit 1",
+    "db:reset": "node scripts/db-reset.mjs",
+    "dev": "pnpm --filter @hms/shared build && pnpm --filter @hms/api dev",
     "lint": "eslint .",
     "typecheck": "pnpm -r run typecheck",
-    "test": "echo 'NOTICE: test not implemented until F2' && exit 0",
+    "test": "pnpm --filter @hms/api test",
     "test:e2e": "echo 'NOTICE: test:e2e not implemented until F6' && exit 0",
     "build": "pnpm -r run build",
     "check:licenses": "node scripts/check-licenses.mjs",
-    "prepare": "husky"
+    "prepare": "(husky 2>/dev/null || true) && node scripts/prisma.mjs generate && pnpm --filter @hms/shared build"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.8.1",

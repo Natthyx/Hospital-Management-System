@@ -14,6 +14,8 @@ export default tseslint.config(
       '**/build/**',
       '**/coverage/**',
       'docker/**',
+      '**/.tmp/**',
+      '**/.temp/**',
     ],
   },
 
@@ -41,6 +43,7 @@ export default tseslint.config(
             'eslint.config.mjs',
             'commitlint.config.mjs',
             'scripts/*.mjs',
+            'scripts/*.ts',
           ],
         },
         tsconfigRootDir: import.meta.dirname,
@@ -127,6 +130,7 @@ export default tseslint.config(
     ],
     rules: {
       'no-restricted-syntax': 'off',
+      '@typescript-eslint/no-require-imports': 'off',
     },
   },
 

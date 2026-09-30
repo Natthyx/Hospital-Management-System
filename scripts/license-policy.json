@@ -11,10 +11,11 @@
     "PostgreSQL",
     "Unlicense",
     "CC0-1.0",
-    "OFL-1.1"
+    "OFL-1.1",
+    "Python-2.0"
   ],
-  "allowedDev": ["BlueOak-1.0.0", "Python-2.0"],
-  "needsApproval": ["MPL-2.0", "CC-BY-3.0", "CC-BY-4.0"],
+  "allowedDev": ["BlueOak-1.0.0", "CC-BY-4.0"],
+  "needsApproval": ["MPL-2.0", "CC-BY-3.0"],
   "forbidden": [
     "GPL-2.0",
     "GPL-2.0-only",

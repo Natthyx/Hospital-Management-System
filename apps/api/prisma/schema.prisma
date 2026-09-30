@@ -1,0 +1,13 @@
+// Prisma schema file for HMS
+// Database migrations run as hms_owner via DATABASE_MIGRATION_URL
+// Runtime PrismaService connects as hms_app via DATABASE_URL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider          = "postgresql"
+  url               = env("DATABASE_MIGRATION_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}

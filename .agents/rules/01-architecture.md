@@ -75,11 +75,11 @@ Use `@nestjs/schedule` (in-process). Jobs (expired-session cleanup, stock expiry
 - `GET` read/list; `POST` create and actions (`POST /prescriptions/:id/dispense`); `PATCH` partial update (must include `version`); `PUT` only for replacing a set (e.g. a role's permissions); `DELETE` only for join records and sessions, **never clinical data**.
 - Pagination: `?page=1&pageSize=25` (default 25, max 100). Sorting: `?sort=field:asc`. Search: `?q=`.
 - Success: `{ "data": ..., "meta": { "page", "pageSize", "total" } }` (`meta` only on lists).
-- Error: `{ "error": { "code", "message", "details"?, "requestId" } }`.
-- Error codes (UPPER_SNAKE): `VALIDATION_FAILED` (400), `UNAUTHENTICATED` (401), `FORBIDDEN` (403), `NOT_FOUND` (404), `CONFLICT` (409), `VERSION_CONFLICT` (409), `RATE_LIMITED` (429), `INTERNAL_ERROR` (500).
+- Error: `{ "error": { "code", "message", "details"?, "requestId" } }`. Every error response without exception includes `requestId`.
+- Error codes (UPPER_SNAKE): `VALIDATION_FAILED` (400), `UNAUTHENTICATED` (401), `FORBIDDEN` (403), `NOT_FOUND` (404), `CONFLICT` (409), `VERSION_CONFLICT` (409), `RATE_LIMITED` (429), `INTERNAL_ERROR` (500), `SERVICE_UNAVAILABLE` (503).
 - Never leak stack traces, SQL, or internal messages to clients.
 - Always return explicit response DTOs. Never return Prisma entities directly.
-- Every request gets a `requestId` (generated or from `X-Request-Id`), returned in a response header and included in logs and audit rows.
+- Every request gets a validated `requestId` (matching `^[a-zA-Z0-9_-]{1,64}$`, otherwise a generated UUID v4), returned in the `x-request-id` response header, included in log lines (`id`), included in audit rows, and returned in every error body.
 - Generate OpenAPI docs from the code. The web app uses types from `packages/shared`; never hand-duplicate types.
 
 ## Configuration
