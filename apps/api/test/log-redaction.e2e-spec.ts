@@ -106,7 +106,10 @@ describe('Log Redaction and Data Protection (e2e)', () => {
     expect(res.headers['set-cookie']).toBeDefined();
 
     const fullLogText = capturedLogs.join('');
+    // Non-vacuous check: log lines must be captured and must contain the request path
+    expect(capturedLogs.length).toBeGreaterThan(0);
     expect(fullLogText.length).toBeGreaterThan(0);
+    expect(fullLogText).toContain('/api/v1/test-redaction');
 
     // 1. None of the sensitive values must appear anywhere in logs
     expect(fullLogText).not.toContain(sensitiveValues.cookie);
@@ -125,6 +128,16 @@ describe('Log Redaction and Data Protection (e2e)', () => {
       .filter((l) => l.startsWith('{') && l.endsWith('}'));
 
     expect(lines.length).toBeGreaterThan(0);
+
+    const hasRequestPathInJson = lines.some((l) => {
+      try {
+        const parsed = JSON.parse(l) as { req?: { url?: string } };
+        return parsed.req?.url === '/api/v1/test-redaction';
+      } catch {
+        return false;
+      }
+    });
+    expect(hasRequestPathInJson).toBe(true);
 
     for (const line of lines) {
       try {

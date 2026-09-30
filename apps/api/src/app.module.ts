@@ -14,16 +14,13 @@ import {
   ResponseEnvelopeInterceptor,
   REQUEST_ID_HEADER,
   resolveRequestId,
+  serializeRequest,
+  serializeResponse,
 } from './common';
 import { ConfigModule, ENV_CONFIG } from './config';
 import type { EnvConfig } from './config';
 import { DatabaseModule } from './database';
 import { HealthModule } from './modules/health';
-
-type ResWithOptionalHeaders = ServerResponse & {
-  headers?: Record<string, unknown>;
-  getHeader?: (name: string) => unknown;
-};
 
 @Module({
   imports: [
@@ -57,6 +54,9 @@ type ResWithOptionalHeaders = ServerResponse & {
             res.setHeader(REQUEST_ID_HEADER, id);
             return id;
           },
+          // Redact paths kept as defense-in-depth. The custom serializers.req
+          // allowlist below is the primary control preventing sensitive headers,
+          // tokens, cookies, query parameters, or request bodies from being logged.
           redact: {
             paths: [
               'req.headers.cookie',
@@ -87,47 +87,8 @@ type ResWithOptionalHeaders = ServerResponse & {
             return `xxx ${req.method ?? 'GET'} ${url} ${String(res.statusCode)} - ${err.message}`;
           },
           serializers: {
-            req(req: IncomingMessage) {
-              const rawUrl = req.url ?? '';
-              const url = rawUrl.split('?')[0] ?? '';
-              const headerReqId = req.headers[REQUEST_ID_HEADER];
-              const rawId = (req as unknown as { id?: string }).id;
-              const id =
-                typeof rawId === 'string' && rawId.length > 0
-                  ? rawId
-                  : typeof headerReqId === 'string'
-                    ? headerReqId
-                    : '';
-              return {
-                id,
-                method: req.method ?? '',
-                url,
-                query: {},
-                headers: {
-                  host: req.headers.host,
-                  'user-agent': req.headers['user-agent'],
-                  'x-request-id': id,
-                },
-              };
-            },
-            res(res: ResWithOptionalHeaders) {
-              const getHeader = (name: string): unknown => {
-                if (typeof res.getHeader === 'function') {
-                  return res.getHeader(name);
-                }
-                if (res.headers && typeof res.headers === 'object') {
-                  return res.headers[name];
-                }
-                return undefined;
-              };
-              return {
-                statusCode: res.statusCode,
-                headers: {
-                  'content-type': getHeader('content-type'),
-                  'x-request-id': getHeader(REQUEST_ID_HEADER),
-                },
-              };
-            },
+            req: serializeRequest,
+            res: serializeResponse,
           },
           ...(env.NODE_ENV === 'development'
             ? {

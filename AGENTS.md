@@ -42,6 +42,7 @@ Precedence if files disagree: this file > `.agents/rules/` > `docs/`. If still u
 21. All user-visible UI text goes through i18n keys (English is the default locale).
 22. Small, reviewable commits using Conventional Commits.
 23. Do not "improve" things outside the task. Note them in `docs/05-progress.md` under "Ideas / follow-ups" instead.
+24. Never present constructed, reconstructed, illustrative or summarized output as the output of a command you ran. Paste real output, or say you did not run it.
 
 ## 3. Fixed stack
 
