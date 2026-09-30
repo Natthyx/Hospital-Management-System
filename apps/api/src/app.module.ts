@@ -43,7 +43,10 @@ type ResWithOptionalHeaders = ServerResponse & {
       inject: [ENV_CONFIG],
       useFactory: (env: EnvConfig) => ({
         pinoHttp: {
-          level: env.LOG_LEVEL,
+          level:
+            env.NODE_ENV === 'test' && process.env.TEST_LOGS_ENABLED !== 'true'
+              ? 'silent'
+              : env.LOG_LEVEL,
           genReqId: (req: IncomingMessage, res: ServerResponse) => {
             const rawHeader = req.headers[REQUEST_ID_HEADER];
             const incoming = Array.isArray(rawHeader)

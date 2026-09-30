@@ -1,4 +1,8 @@
-import { validateEnv } from './env.schema';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import { loadRootEnv, validateEnv } from './env.schema';
 
 describe('validateEnv', () => {
   const validBaseEnv = {
@@ -63,5 +67,51 @@ describe('validateEnv', () => {
 
     expect(config.PORT).toBe(8080);
     expect(config.THROTTLE_LIMIT).toBe(50);
+  });
+});
+
+describe('loadRootEnv', () => {
+  it('refuses to load .env when NODE_ENV is production', () => {
+    const loaded = loadRootEnv({ nodeEnv: 'production' });
+    expect(loaded).toBe(false);
+  });
+
+  it('loads .env from explicit root path when not production', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hms-env-test-'));
+    try {
+      fs.writeFileSync(path.join(tempDir, '.env'), 'TEST_LOAD_VAR=from_file\n');
+      const loaded = loadRootEnv({ nodeEnv: 'development', rootDir: tempDir });
+      expect(loaded).toBe(true);
+      expect(process.env.TEST_LOAD_VAR).toBe('from_file');
+    } finally {
+      delete process.env.TEST_LOAD_VAR;
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('never overrides variables already set in the environment', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hms-env-test-'));
+    try {
+      process.env.TEST_EXISTING_VAR = 'pre_existing';
+      fs.writeFileSync(
+        path.join(tempDir, '.env'),
+        'TEST_EXISTING_VAR=from_file_override_attempt\n',
+      );
+      loadRootEnv({ nodeEnv: 'development', rootDir: tempDir });
+      expect(process.env.TEST_EXISTING_VAR).toBe('pre_existing');
+    } finally {
+      delete process.env.TEST_EXISTING_VAR;
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns false gracefully when .env does not exist at root path', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hms-env-test-'));
+    try {
+      const loaded = loadRootEnv({ nodeEnv: 'development', rootDir: tempDir });
+      expect(loaded).toBe(false);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 });

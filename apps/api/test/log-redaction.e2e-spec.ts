@@ -36,6 +36,8 @@ describe('Log Redaction and Data Protection (e2e)', () => {
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
     process.env.PORT = '3003';
+    process.env.LOG_LEVEL = 'info';
+    process.env.TEST_LOGS_ENABLED = 'true';
     process.env.DATABASE_URL =
       process.env.DATABASE_URL ??
       'postgresql://hms_app:dev_app_pass@localhost:5432/hms_test';
@@ -55,6 +57,8 @@ describe('Log Redaction and Data Protection (e2e)', () => {
   });
 
   afterAll(async () => {
+    delete process.env.TEST_LOGS_ENABLED;
+    delete process.env.LOG_LEVEL;
     process.stdout.write = originalStdoutWrite;
     await app.close();
   });

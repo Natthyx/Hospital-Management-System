@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 
 import { z } from 'zod';
@@ -49,8 +50,8 @@ const envSchema = z.object({
 
   /** Application log level */
   LOG_LEVEL: z
-    .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace'])
-    .default('info'),
+    .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
+    .default(process.env.NODE_ENV === 'test' ? 'silent' : 'info'),
 
   /** IANA timezone name for the hospital */
   HOSPITAL_TIMEZONE: z.string().min(1).default('UTC'),
@@ -74,6 +75,69 @@ const envSchema = z.object({
 type EnvConfig = z.infer<typeof envSchema>;
 
 /**
+ * Parses simple KEY=VALUE lines from a .env file content.
+ */
+function parseEnvContent(content: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  const lines = content.split('\n');
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) {
+      continue;
+    }
+    const eqIdx = line.indexOf('=');
+    if (eqIdx <= 0) {
+      continue;
+    }
+    const key = line.slice(0, eqIdx).trim();
+    let val = line.slice(eqIdx + 1).trim();
+    if (
+      (val.startsWith('"') && val.endsWith('"')) ||
+      (val.startsWith("'") && val.endsWith("'"))
+    ) {
+      val = val.slice(1, -1);
+    }
+    result[key] = val;
+  }
+  return result;
+}
+
+/**
+ * Loads the repository root .env file into the environment if running locally.
+ *
+ * Rules:
+ * (a) Only runs when NODE_ENV is not 'production'.
+ * (b) Loads only the repo-root .env by explicit path.
+ * (c) Never overrides variables already set in process.env.
+ */
+function loadRootEnv(
+  options: {
+    nodeEnv?: string;
+    rootDir?: string;
+  } = {},
+): boolean {
+  const currentEnv = options.nodeEnv ?? process.env.NODE_ENV;
+  if (currentEnv === 'production') {
+    return false;
+  }
+
+  // Explicit repo root: three levels up from src/config or dist/config
+  const rootDir = options.rootDir ?? path.resolve(__dirname, '../../..');
+  const envPath = path.resolve(rootDir, '.env');
+
+  try {
+    const content = fs.readFileSync(envPath, 'utf8');
+    const parsed = parseEnvContent(content);
+    for (const [key, val] of Object.entries(parsed)) {
+      process.env[key] ??= val;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Parse and validate environment variables.
  * Throws a descriptive ZodError on invalid configuration.
  */
@@ -82,24 +146,10 @@ function validateEnv(
 ): EnvConfig {
   if (
     env === process.env &&
-    !process.env.DATABASE_URL &&
-    typeof process.loadEnvFile === 'function'
+    process.env.NODE_ENV !== 'production' &&
+    !process.env.DATABASE_URL
   ) {
-    const candidatePaths = [
-      path.resolve(process.cwd(), '.env'),
-      path.resolve(process.cwd(), '../../.env'),
-      path.resolve(__dirname, '../../.env'),
-      path.resolve(__dirname, '../../../.env'),
-      path.resolve(__dirname, '../../../../.env'),
-    ];
-    for (const candidate of candidatePaths) {
-      try {
-        process.loadEnvFile(candidate);
-        break;
-      } catch {
-        // Try next candidate
-      }
-    }
+    loadRootEnv();
   }
 
   const result = envSchema.safeParse(env);
@@ -114,5 +164,5 @@ function validateEnv(
   return result.data;
 }
 
-export { envSchema, validateEnv };
+export { envSchema, validateEnv, loadRootEnv };
 export type { EnvConfig };
