@@ -1,0 +1,39 @@
+# HMS Development PostgreSQL
+#
+# Roles and databases:
+#   hms_owner — owns schema objects, used only for migrations (DATABASE_MIGRATION_URL)
+#   hms_app   — least-privilege runtime role, CONNECT + USAGE only (DATABASE_URL)
+#   Databases: hms_dev, hms_test
+#
+# Passwords are read from environment variables (set in .env or shell).
+# Postgres is bound to 127.0.0.1 (host-only, not exposed to the network).
+#
+# To fully reset (drop data): pnpm db:down then
+#   docker compose -f docker/docker-compose.yml down -v
+# then pnpm db:up again.
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: hms-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?Set POSTGRES_SUPERUSER_PASSWORD in .env or environment}
+      HMS_OWNER_PASSWORD: ${HMS_OWNER_PASSWORD:?Set HMS_OWNER_PASSWORD in .env or environment}
+      HMS_APP_PASSWORD: ${HMS_APP_PASSWORD:?Set HMS_APP_PASSWORD in .env or environment}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - hms-pgdata:/var/lib/postgresql/data
+      - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  hms-pgdata:
+    name: hms-pgdata

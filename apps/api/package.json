@@ -1,0 +1,19 @@
+{
+  "name": "@hms/api",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "echo 'NOTICE: API build not implemented until F2' && exit 0",
+    "test": "echo 'NOTICE: API tests not implemented until F2' && exit 0",
+    "typecheck": "tsc --noEmit",
+    "dev": "echo 'ERROR: API dev not yet implemented (added in milestone F2)' && exit 1"
+  },
+  "dependencies": {
+    "@hms/shared": "workspace:*",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "typescript": "^5.8.3"
+  }
+}

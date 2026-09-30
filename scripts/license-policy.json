@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json.schemastore.org/base.json",
+  "description": "License policy for HMS. All dependencies must be under an allowed license. See docs/THIRD_PARTY_LICENSES.md for full rules.",
+  "allowed": [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "0BSD",
+    "PostgreSQL",
+    "Unlicense",
+    "CC0-1.0",
+    "OFL-1.1"
+  ],
+  "allowedDev": ["BlueOak-1.0.0", "Python-2.0"],
+  "needsApproval": ["MPL-2.0", "CC-BY-3.0", "CC-BY-4.0"],
+  "forbidden": [
+    "GPL-2.0",
+    "GPL-2.0-only",
+    "GPL-2.0-or-later",
+    "GPL-3.0",
+    "GPL-3.0-only",
+    "GPL-3.0-or-later",
+    "LGPL-2.0",
+    "LGPL-2.0-only",
+    "LGPL-2.0-or-later",
+    "LGPL-2.1",
+    "LGPL-2.1-only",
+    "LGPL-2.1-or-later",
+    "LGPL-3.0",
+    "LGPL-3.0-only",
+    "LGPL-3.0-or-later",
+    "AGPL-1.0",
+    "AGPL-3.0",
+    "AGPL-3.0-only",
+    "AGPL-3.0-or-later",
+    "SSPL-1.0",
+    "BUSL-1.1",
+    "Elastic-2.0"
+  ],
+  "ignoredPackages": []
+}

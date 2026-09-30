@@ -1,0 +1,124 @@
+# HMS CI Pipeline
+#
+# Runs on every push and pull request.
+# Uses a real PostgreSQL service for integration tests.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Lint, Typecheck, Test, Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_postgres_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=5
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://hms_app:ci_app_password@localhost:5432/hms_test
+      DATABASE_MIGRATION_URL: postgresql://hms_owner:ci_owner_password@localhost:5432/hms_test
+      POSTGRES_SUPERUSER_PASSWORD: ci_postgres_password
+      HMS_OWNER_PASSWORD: ci_owner_password
+      HMS_APP_PASSWORD: ci_app_password
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.2.2
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4.1.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4.4.0
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Initialize test database
+        run: |
+          PGPASSWORD=ci_postgres_password psql -h localhost -U postgres -d postgres <<-EOSQL
+            CREATE ROLE hms_owner WITH LOGIN PASSWORD 'ci_owner_password' NOSUPERUSER NOCREATEDB NOCREATEROLE;
+            CREATE ROLE hms_app WITH LOGIN PASSWORD 'ci_app_password' NOSUPERUSER NOCREATEDB NOCREATEROLE;
+            CREATE DATABASE hms_test OWNER hms_owner;
+          EOSQL
+          PGPASSWORD=ci_postgres_password psql -h localhost -U postgres -d hms_test <<-EOSQL
+            REVOKE ALL ON DATABASE hms_test FROM PUBLIC;
+            REVOKE ALL ON SCHEMA public FROM PUBLIC;
+            ALTER SCHEMA public OWNER TO hms_owner;
+            GRANT CONNECT ON DATABASE hms_test TO hms_app;
+            GRANT USAGE ON SCHEMA public TO hms_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE hms_owner IN SCHEMA public REVOKE ALL ON TABLES FROM hms_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE hms_owner IN SCHEMA public REVOKE ALL ON SEQUENCES FROM hms_app;
+          EOSQL
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build shared package
+        run: pnpm --filter @hms/shared build
+
+      # Tests are enabled in CI in milestone F2 once test suites are implemented (see docs/05-progress.md)
+      # - name: Test
+      #   run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Check licenses
+        run: pnpm check:licenses
+
+      - name: Audit dependencies
+        run: pnpm audit --audit-level=high
+
+      - name: Secret scan
+        run: |
+          # Scan for common secret patterns in tracked files
+          # Patterns: AWS keys, private keys, hardcoded passwords in connection strings
+          echo "Scanning for secrets in tracked files..."
+          FOUND=0
+          # AWS access key IDs
+          if git grep -InE 'AKIA[0-9A-Z]{16}' -- ':(exclude)*.yml' ':(exclude)scripts/check-licenses.mjs' ':(exclude).github/workflows/ci.yml'; then
+            echo "::error::Potential AWS access key found"
+            FOUND=1
+          fi
+          # Private keys
+          if git grep -InE 'BEGIN (RSA |DSA |EC |OPENSSH )?PRIVATE KEY' -- ':(exclude)*.md'; then
+            echo "::error::Private key found in repository"
+            FOUND=1
+          fi
+          # Hardcoded passwords in DATABASE_URL (not placeholders)
+          if git grep -InE 'DATABASE_URL=.*://[^:]+:[^@]+@' -- '.env' '.env.*' ':(exclude).env.example' 2>/dev/null; then
+            echo "::error::Hardcoded database credentials found"
+            FOUND=1
+          fi
+          if [ "$FOUND" -eq 1 ]; then
+            exit 1
+          fi
+          echo "No secrets found. ✓"

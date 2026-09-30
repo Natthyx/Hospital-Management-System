@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "verbatimModuleSyntax": false
+  },
+  "include": ["eslint.config.mjs", "commitlint.config.mjs", "scripts/**/*.mjs"]
+}

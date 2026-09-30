@@ -1,11 +1,21 @@
-# Nestjs specific
-/dist
-/node_modules
-/build
-/tmp
+# ─── Dependencies ───
+node_modules/
 
-# Logs
-logs
+# ─── Build output ───
+dist/
+build/
+*.tsbuildinfo
+
+
+# ─── Environment (never commit secrets) ───
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# ─── Logs ───
+logs/
 *.log
 npm-debug.log*
 pnpm-debug.log*
@@ -13,12 +23,27 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 
-# dotenv environment variable files
-.env
-.env.development
-.env.test
-.env.production
+# ─── Testing ───
+coverage/
 
-# temp directory
-.temp
-.tmp
+# ─── IDE ───
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ─── OS ───
+.DS_Store
+Thumbs.db
+
+# ─── Temp ───
+.temp/
+.tmp/
+tmp/
+
+# ─── Prisma (generated client is rebuilt from schema) ───
+apps/api/prisma/generated/
+
+# ─── Docker volumes (managed by Docker) ───
+docker/data/
