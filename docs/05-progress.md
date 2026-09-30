@@ -4,12 +4,12 @@ The agent updates this file at the end of every task. The owner signs off milest
 
 ## Current milestone
 
-**F2 — API skeleton** (status: defect fixes completed, ready for owner review and sign-off)
+**F3 Identity Data Model** (status: in-progress)
 
 ## Phase 0 — Foundation
 
 - [x] F1 Repo and tooling (F1 signed off by owner: 2026-09-30)
-- [ ] F2 API skeleton (ready for owner sign-off)
+- [x] F2 API skeleton (F2 signed off by owner: 2026-09-30)
 - [ ] F3 Identity data model
 - [ ] F4 Authentication
 - [ ] F5 Audit module
