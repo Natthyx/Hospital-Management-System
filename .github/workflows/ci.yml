@@ -43,6 +43,8 @@ jobs:
       HMS_APP_PASSWORD: ci_app_password
       DATABASE_URL: postgresql://hms_app:ci_app_password@localhost:5432/hms_test
       DATABASE_MIGRATION_URL: postgresql://hms_owner:ci_owner_password@localhost:5432/hms_test
+      TEST_DATABASE_URL: postgresql://hms_app:ci_app_password@localhost:5432/hms_test
+      TEST_DATABASE_MIGRATION_URL: postgresql://hms_owner:ci_owner_password@localhost:5432/hms_test
       SHADOW_DATABASE_URL: postgresql://hms_owner:ci_owner_password@localhost:5432/hms_test_shadow
 
     steps:
@@ -73,6 +75,9 @@ jobs:
 
       - name: Migrate test database (as hms_owner)
         run: pnpm db:migrate
+
+      - name: Check database schema drift
+        run: pnpm db:check:drift
 
       - name: Lint
         run: pnpm lint

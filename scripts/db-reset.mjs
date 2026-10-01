@@ -17,7 +17,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { validateDbResetEnv } from './db-reset-guard.ts';
+import { validateDbResetEnv } from './db-reset-guard.mts';
 
 const rootDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),

@@ -44,6 +44,7 @@ export default tseslint.config(
             'commitlint.config.mjs',
             'scripts/*.mjs',
             'scripts/*.ts',
+            'scripts/*.mts',
           ],
         },
         tsconfigRootDir: import.meta.dirname,
@@ -141,6 +142,7 @@ export default tseslint.config(
     rules: {
       ...tseslint.configs.disableTypeChecked.rules,
       'no-console': 'off',
+      '@typescript-eslint/no-require-imports': 'off',
     },
   },
 );

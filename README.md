@@ -21,13 +21,21 @@ cp .env.example .env
 # 3. Start the development database
 pnpm db:up
 
-# 4. Verify tooling
+# 4. Migrate database and run initial required seed
+pnpm db:migrate
+pnpm build
+pnpm db:seed:required
+
+# 5. Verify tooling
 pnpm lint        # ESLint (flat config, type-aware)
 pnpm typecheck   # TypeScript strict across all packages
 
-# 5. Check dependency licenses
+# 6. Check dependency licenses
 pnpm check:licenses
 ```
+
+> [!IMPORTANT]
+> **Admin Password Security:** Running `pnpm db:seed:required` creates the initial `admin` user if no users exist and prints an unambiguous 24-character temporary password to stdout. This temporary password **prints only once**, must be changed at first login (`must_change_password` is set to `true`), and **must never be pasted into chats, issue trackers, or logs**.
 
 ## Available Scripts
 

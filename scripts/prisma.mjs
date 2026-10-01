@@ -22,10 +22,20 @@ try {
 }
 
 const args = process.argv.slice(2);
+const finalArgs = [...args];
+
+if (
+  args[0] === 'migrate' &&
+  args[1] === 'diff' &&
+  !args.some((a) => a.startsWith('--shadow-database-url')) &&
+  process.env.SHADOW_DATABASE_URL
+) {
+  finalArgs.push('--shadow-database-url', process.env.SHADOW_DATABASE_URL);
+}
 
 const result = spawnSync(
   'pnpm',
-  ['--filter', '@hms/api', 'exec', 'prisma', ...args],
+  ['--filter', '@hms/api', 'exec', 'prisma', ...finalArgs],
   {
     stdio: 'inherit',
     cwd: rootDir,

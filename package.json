@@ -10,7 +10,8 @@
     "onlyBuiltDependencies": [
       "@prisma/client",
       "@prisma/engines",
-      "prisma"
+      "prisma",
+      "argon2"
     ],
     "overrides": {
       "deepmerge-ts": "^8.0.0"
@@ -20,9 +21,10 @@
     "db:up": "docker compose --env-file .env -f docker/docker-compose.yml up -d --wait",
     "db:down": "docker compose --env-file .env -f docker/docker-compose.yml down",
     "db:migrate": "node scripts/prisma.mjs migrate deploy",
-    "db:seed:required": "echo 'ERROR: db:seed:required not yet implemented (added in milestone F3)' && exit 1",
-    "db:seed:dev": "echo 'ERROR: db:seed:dev not yet implemented (added in milestone F3)' && exit 1",
+    "db:seed:required": "node scripts/run-seed.mjs",
+    "db:seed:dev": "echo 'ERROR: db:seed:dev not yet implemented' && exit 1",
     "db:reset": "node scripts/db-reset.mjs",
+    "db:check:drift": "node scripts/prisma.mjs migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --exit-code",
     "dev": "pnpm --filter @hms/shared build && pnpm --filter @hms/api dev",
     "lint": "eslint .",
     "typecheck": "pnpm -r run typecheck",

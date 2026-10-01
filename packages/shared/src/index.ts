@@ -15,3 +15,16 @@ export {
 export type { HealthResponse, HealthEnvelope } from './schemas/health.schema';
 export { errorEnvelopeSchema } from './schemas/error.schema';
 export type { ErrorEnvelope } from './schemas/error.schema';
+export {
+  ROLE_CODE_PATTERN,
+  ROLE_CODE_REGEX,
+  PERMISSION_CODE_PATTERN,
+  PERMISSION_CODE_REGEX,
+  USER_STATUSES,
+  PERMISSIONS,
+} from './identity';
+export type {
+  UserStatus,
+  PermissionDefinition,
+  PermissionCode,
+} from './identity';

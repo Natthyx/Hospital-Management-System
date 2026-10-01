@@ -150,7 +150,7 @@ Entry format: `ADR-NNN — Title` · Status · Date · Decision · Reason · Con
 4. Separate migration credentials from runtime credentials:
    - `schema.prisma` configures `url = env("DATABASE_MIGRATION_URL")` and `shadowDatabaseUrl = env("SHADOW_DATABASE_URL")`. Migration commands (`prisma migrate dev`, `prisma migrate deploy`, `prisma migrate reset`) always run under the privileged `hms_owner` role.
    - At runtime, `PrismaService` initializes `PrismaClient` with `datasources: { db: { url: envConfig.DATABASE_URL } }`, ensuring the running NestJS application strictly operates under the least-privilege `hms_app` role.
-5. In root `package.json`, `pnpm.onlyBuiltDependencies` is strictly limited to `@prisma/client`, `@prisma/engines`, and `prisma`. Telemetry (`@scarf/scarf`) is blocked. `argon2` is deferred to F4.
+5. In root `package.json`, `pnpm.onlyBuiltDependencies` is strictly limited to `@prisma/client`, `@prisma/engines`, and `prisma`. Telemetry (`@scarf/scarf`) is blocked. `argon2` is deferred to F4. _(Note: Superseded in part by ADR-024, which brought `argon2@0.45.1` into milestone F3 to hash passwords for the required admin seed, updating `onlyBuiltDependencies` to include `argon2`)._
    **Consequences:** Clear architectural separation between schema migrations (`hms_owner`) and application runtime (`hms_app`).
 
 ## ADR-020 — Validation, response serialization, and OpenAPI with nestjs-zod v5
@@ -193,6 +193,49 @@ The OWNER approved Python-2.0 (production) and CC-BY-4.0 (dev tooling only) on 2
 5. **Validation:** Exercised and tested via `cleanupOpenApiDoc` and `SwaggerModule.createDocument` in `apps/api/test/swagger-csp.e2e-spec.ts`.
 6. **Removal condition:** Remove this override when `nestjs-zod` publishes an updated release specifying `deepmerge-ts >= 8.0.0`.
    **Consequences:** High-severity audit vulnerability is resolved; OpenAPI schema generation is tested and working properly.
+
+## ADR-023 — Identity Data Model, UUIDv7 Generation, and Optimistic Locking Scope
+
+**Status:** Accepted
+**Date:** 2026-10-01
+**Decision:**
+
+1. Generate UUIDv7 primary keys at the application level via Prisma Client (`@id @default(uuid(7)) @db.Uuid`) with zero database-level default clauses. Raw SQL inserts must supply generated UUIDs explicitly.
+2. Status column implemented as a PostgreSQL enum type `"user_status"` (`@@map("user_status")`) with values `active` and `disabled` per Rule 03 line 37.
+3. Database `set_updated_at` trigger attached only to tables that have the `updated_at` column (`users` and `roles`); explicitly omitted from `sessions`, `permissions`, `role_permissions`, and `user_roles`.
+4. Omit the `enforce_version_increment` trigger from the database.
+   **Reason:**
+   A database trigger enforcing `NEW.version = OLD.version + 1` forces every `UPDATE` on `users` to bump `version`, including high-frequency login counters (`failed_login_count`, `last_login_at` in F4). This would cause spurious `VERSION_CONFLICT` errors for an administrator updating profile details when a user logs in concurrently. Optimistic locking remains in the application service layer (`WHERE id = $id AND version = $expected_version`), where F4 will define which specific business updates increment `version`.
+   **Consequences:** Clean separation of business-level concurrency control from system-level counter updates. Fully compliant with Rule 03.
+
+## ADR-024 — Password Hashing with Argon2id
+
+**Status:** Accepted
+**Date:** 2026-10-01
+**Decision:**
+
+1. Pin `argon2` to exact version `0.45.1` (no caret) in `apps/api`. Only `argon2` is added to `pnpm.onlyBuiltDependencies`. Its four dependencies (`cross-env`, `@phc/format`, `node-addon-api`, `node-gyp-build`) are all MIT-licensed and have no install scripts.
+2. Enforce Argon2id parameters via `env.schema.ts`:
+   - Default profile: `ARGON2_MEMORY=65536` KiB (64 MiB), `ARGON2_ITERATIONS=3`, `ARGON2_PARALLELISM=4` (corresponding to RFC 9106's second recommended profile).
+   - Production/development floor: `ARGON2_MEMORY >= 19456` KiB (19 MiB OWASP floor), `ARGON2_ITERATIONS >= 3`, `ARGON2_PARALLELISM >= 1`.
+   - Test environment override: relaxed in `NODE_ENV=test` (`memory >= 1024`, `iterations >= 1`) for fast test execution.
+3. Enforce hash prefix in PostgreSQL: `CHECK (password_hash LIKE '$argon2id$%')`.
+   **Reason:** Argon2id is the state-of-the-art memory-hard password hashing algorithm providing maximum resistance against GPU/ASIC cracking attacks.
+   **Consequences:** High security for stored passwords; fast test suite execution via test overrides; compliance with Rule 04.
+
+## ADR-025 — Test Database Isolation & Safety Safeguards
+
+**Status:** Accepted
+**Date:** 2026-10-01
+**Decision:**
+
+1. Dedicated test connection variables: `TEST_DATABASE_URL` (hms_app) and `TEST_DATABASE_MIGRATION_URL` (hms_owner). Jest fails fast if either variable is missing or does not point to `hms_test`. No silent URL rewriting.
+2. Inside Jest, `jest.config.js` maps test variables onto `DATABASE_URL` and `DATABASE_MIGRATION_URL` for the test process only. Dev server and CLI scripts continue using `hms_dev`.
+3. Jest `globalSetup` executes `prisma migrate deploy` as `hms_owner` against `hms_test` before any test suite runs, ensuring migrations reach the test database automatically.
+4. Test cleaner helper connects as `hms_owner` and executes `SELECT current_database()` over the active connection. If the returned string is not strictly `'hms_test'`, it hard-refuses execution.
+5. All database tests run sequentially via `--runInBand` because the cleaner uses `TRUNCATE ... CASCADE` across shared tables.
+   **Reason:** Complete test isolation from development data, with fail-fast protection preventing any test from accidentally touching `hms_dev`.
+   **Consequences:** Fast, repeatable, and completely safe test suite execution.
 
 ---
 

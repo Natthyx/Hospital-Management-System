@@ -62,6 +62,11 @@ GPL (any version), LGPL, AGPL, SSPL, BUSL, Commons Clause, Elastic License, "sou
 | supertest                        | 7.3.0   | MIT        | api                | HTTP integration test assertions (dev)               | 2026-09-30   |
 | @types/supertest                 | 6.0.3   | MIT        | api                | Supertest TypeScript definitions (dev)               | 2026-09-30   |
 | @types/express                   | 5.0.6   | MIT        | api                | Express TypeScript definitions (dev)                 | 2026-09-30   |
+| argon2                           | 0.45.1  | MIT        | api                | Password hashing with Argon2id (ADR-024)             | 2026-10-01   |
+| cross-env                        | 10.1.0  | MIT        | api                | Cross-platform env vars (argon2 dep)                 | 2026-10-01   |
+| @phc/format                      | 1.0.0   | MIT        | api                | PHC string format encoder/decoder (argon2 dep)       | 2026-10-01   |
+| node-addon-api                   | 8.9.0   | MIT        | api                | Node.js C++ addon API bindings (argon2 dep)          | 2026-10-01   |
+| node-gyp-build                   | 4.8.4   | MIT        | api                | Native prebuild loader (argon2 dep)                  | 2026-10-01   |
 
 ## Notes
 

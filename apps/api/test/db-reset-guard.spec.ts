@@ -1,4 +1,4 @@
-import { validateDbResetEnv } from '../../../scripts/db-reset-guard';
+import { validateDbResetEnv } from '../../../scripts/db-reset-guard.mjs';
 
 describe('db-reset-guard', () => {
   const validBaseEnv = {

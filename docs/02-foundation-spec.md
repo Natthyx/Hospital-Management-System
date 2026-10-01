@@ -4,25 +4,30 @@ Detailed spec for milestones F1 to F8. Follow it exactly. If something is ambigu
 
 ## Environment variables
 
-| Variable                 | Default (dev)                                          | Notes                                 |
-| ------------------------ | ------------------------------------------------------ | ------------------------------------- |
-| `NODE_ENV`               | `development`                                          | `development` / `test` / `production` |
-| `PORT`                   | `3000`                                                 | API port                              |
-| `APP_ORIGIN`             | `http://localhost:5173`                                | Used for Origin check                 |
-| `DATABASE_URL`           | `postgresql://hms_app:...@localhost:5432/hms_dev`      | Runtime, least-privilege role         |
-| `DATABASE_MIGRATION_URL` | `postgresql://hms_owner:...@localhost:5432/hms_dev`    | Migrations only                       |
-| `SHADOW_DATABASE_URL`    | `postgresql://hms_owner:...@localhost:5432/hms_shadow` | Prisma shadow DB for migrate dev      |
-| `SESSION_IDLE_MINUTES`   | `15`                                                   |                                       |
-| `SESSION_ABSOLUTE_HOURS` | `12`                                                   |                                       |
-| `LOGIN_MAX_FAILURES`     | `5`                                                    |                                       |
-| `LOGIN_LOCK_MINUTES`     | `15`                                                   |                                       |
-| `COOKIE_SECURE`          | `false` in dev, `true` in production                   |                                       |
-| `LOG_LEVEL`              | `info`                                                 |                                       |
-| `HOSPITAL_TIMEZONE`      | `UTC`                                                  | IANA name                             |
-| `DEFAULT_LOCALE`         | `en`                                                   |                                       |
-| `SWAGGER_ENABLED`        | `false`                                                | Enables /api/docs (dev only)          |
-| `THROTTLE_TTL_MS`        | `60000`                                                | Throttler window in ms                |
-| `THROTTLE_LIMIT`         | `100`                                                  | Max requests per throttler window     |
+| Variable                      | Default (dev)                                          | Notes                                                                |
+| ----------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------- |
+| `NODE_ENV`                    | `development`                                          | `development` / `test` / `production`                                |
+| `PORT`                        | `3000`                                                 | API port                                                             |
+| `APP_ORIGIN`                  | `http://localhost:5173`                                | Used for Origin check                                                |
+| `DATABASE_URL`                | `postgresql://hms_app:...@localhost:5432/hms_dev`      | Runtime, least-privilege role                                        |
+| `DATABASE_MIGRATION_URL`      | `postgresql://hms_owner:...@localhost:5432/hms_dev`    | Migrations only                                                      |
+| `SHADOW_DATABASE_URL`         | `postgresql://hms_owner:...@localhost:5432/hms_shadow` | Prisma shadow DB for migrate dev                                     |
+| `TEST_DATABASE_URL`           | `postgresql://hms_app:...@localhost:5432/hms_test`     | Test runtime connection (mapped to DATABASE_URL by Jest)             |
+| `TEST_DATABASE_MIGRATION_URL` | `postgresql://hms_owner:...@localhost:5432/hms_test`   | Test migration connection (mapped to DATABASE_MIGRATION_URL by Jest) |
+| `ARGON2_MEMORY`               | `65536`                                                | Memory cost in KiB (RFC 9106 profile; prod/dev floor 19456 KiB)      |
+| `ARGON2_ITERATIONS`           | `3`                                                    | Time cost / iterations (RFC 9106 profile; prod/dev floor 3)          |
+| `ARGON2_PARALLELISM`          | `4`                                                    | Parallel threads (RFC 9106 profile; floor 1)                         |
+| `SESSION_IDLE_MINUTES`        | `15`                                                   |                                                                      |
+| `SESSION_ABSOLUTE_HOURS`      | `12`                                                   |                                                                      |
+| `LOGIN_MAX_FAILURES`          | `5`                                                    |                                                                      |
+| `LOGIN_LOCK_MINUTES`          | `15`                                                   |                                                                      |
+| `COOKIE_SECURE`               | `false` in dev, `true` in production                   |                                                                      |
+| `LOG_LEVEL`                   | `info`                                                 |                                                                      |
+| `HOSPITAL_TIMEZONE`           | `UTC`                                                  | IANA name                                                            |
+| `DEFAULT_LOCALE`              | `en`                                                   |                                                                      |
+| `SWAGGER_ENABLED`             | `false`                                                | Enables /api/docs (dev only)                                         |
+| `THROTTLE_TTL_MS`             | `60000`                                                | Throttler window in ms                                               |
+| `THROTTLE_LIMIT`              | `100`                                                  | Max requests per throttler window                                    |
 
 ## F1 — Repo and tooling
 
@@ -42,7 +47,7 @@ Acceptance: fresh clone, `pnpm install`, `pnpm db:up`, `pnpm lint`, `pnpm typech
 Tasks:
 
 - NestJS app with pino logging, request-ID correlation (`x-request-id` header validation with `^[a-zA-Z0-9_-]{1,64}$`, UUID fallback, log and error envelope correlation), global validation pipe (Zod with `strictSchemaDeclaration: true`), global exception filter with `{ error: { code, message, details?, requestId } }`, `ResponseEnvelopeInterceptor` wrapping success in `{ data }`, Helmet security headers with strict CSP (`'unsafe-inline'` allowed only on `/api/docs` in non-production), Throttler rate limiting.
-- `PrismaService`; Prisma schema; migration tooling using `DATABASE_MIGRATION_URL` via `scripts/prisma.mjs`; `db:reset` safety guard (`scripts/db-reset-guard.mjs`) ensuring reset only executes in `development` against local hosts (`localhost`, `127.0.0.1`, `::1`) and allowlisted databases (`hms_dev`, `hms_test`).
+- `PrismaService`; Prisma schema; migration tooling using `DATABASE_MIGRATION_URL` via `scripts/prisma.mjs`; `db:reset` safety guard (`scripts/db-reset-guard.mts`) ensuring reset only executes in `development` against local hosts (`localhost`, `127.0.0.1`, `::1`) and allowlisted databases (`hms_dev`, `hms_test`).
 - `GET /api/v1/health` (public): returns `{ "data": { "status": "ok", "database": "connected" } }`. No timestamp, no internal connection or host details leaked on failure. No `/health/liveness` or `/health/readiness` probe endpoints. Health module located at `apps/api/src/modules/health/`.
 - Swagger/OpenAPI at `/api/docs`: enabled only in development when `SWAGGER_ENABLED=true` (defaults to false when unset).
 - Scripts: `pnpm db:migrate` runs migrations via `node scripts/prisma.mjs migrate deploy` with root `.env` loaded without symlinks; `pnpm db:reset` runs through `scripts/db-reset.mjs` with safety guard verification.
@@ -66,19 +71,36 @@ Acceptance: API boots, health returns `{ data: { status: "ok", database: "connec
 
 Tables (all follow rule 03; `hms_app` grants as noted):
 
-**`users`**: `id`, `username` (unique, lowercase), `full_name`, `email` (nullable, unique when set, lowercase), `phone` (nullable), `password_hash`, `status` (`active` | `disabled`), `must_change_password` (default true), `failed_login_count` (default 0), `locked_until` (nullable), `password_changed_at`, `mfa_secret_encrypted` (nullable, reserved), `last_login_at`, plus standard columns (`created_at`, `updated_at`, `created_by`, `updated_by`, `version`).
+**`users`**: `id` (UUIDv7, application-generated via Prisma `@default(uuid(7)) @db.Uuid`, no DB default), `username` (unique, lowercase, length 3-32), `full_name`, `email` (nullable, unique when set, lowercase), `phone` (nullable), `password_hash` (`$argon2id$...`), `status` (PostgreSQL enum `user_status`: `active` | `disabled`), `must_change_password` (default true), `failed_login_count` (default 0, non-negative), `locked_until` (nullable), `password_changed_at`, `mfa_secret_encrypted` (nullable, reserved), `last_login_at`, plus standard columns (`created_at`, `updated_at`, `created_by`, `updated_by`, `version`). `set_updated_at` trigger attached.
 
-**`roles`**: `id`, `code` (unique, snake_case, e.g. `receptionist`), `name`, `description`, `is_system` (system roles cannot be deleted; `admin` permissions cannot be reduced below the foundation set), standard columns.
+**`roles`**: `id` (UUIDv7), `code` (unique, lowercase snake_case `^[a-z][a-z0-9_]{1,49}$`), `name`, `description` (NOT NULL), `is_system` (system roles cannot be deleted; `admin` permissions cannot be reduced below the foundation set), standard columns (`created_at`, `updated_at`, `created_by`, `updated_by`, `version`). `set_updated_at` trigger attached.
 
-**`permissions`**: `code` (primary key, e.g. `users.read`), `module`, `description`, `created_at`. Synced from the code catalog. No manual inserts.
+**`permissions`**: `code` (primary key, e.g. `users.read`), `module`, `description` (NOT NULL), `created_at`. Synced from the code catalog. No manual inserts. CHECK constraint enforces `split_part(code, '.', 1) = module`. No `updated_at` column; no trigger.
 
-**`role_permissions`**: `role_id`, `permission_code`, `granted_at`, `granted_by`. Primary key (`role_id`, `permission_code`). `DELETE` allowed for `hms_app`.
+**`role_permissions`**: `role_id`, `permission_code`, `granted_at`, `granted_by`. Primary key (`role_id`, `permission_code`). Foreign keys with `ON DELETE RESTRICT`. Grants for `hms_app`: `SELECT, INSERT, DELETE` (NO `UPDATE`). No `updated_at` column.
 
-**`user_roles`**: `user_id`, `role_id`, `assigned_at`, `assigned_by`. Primary key (`user_id`, `role_id`). `DELETE` allowed for `hms_app`.
+**`user_roles`**: `user_id`, `role_id`, `assigned_at`, `assigned_by`. Primary key (`user_id`, `role_id`). Foreign keys with `ON DELETE RESTRICT`. Grants for `hms_app`: `SELECT, INSERT, DELETE` (NO `UPDATE`). No `updated_at` column.
 
-**`sessions`**: `id`, `user_id`, `token_hash` (unique), `csrf_token_hash`, `created_at`, `last_seen_at`, `expires_at` (absolute), `revoked_at`, `revoked_reason`, `ip`, `user_agent`. `DELETE` allowed (expired-session cleanup job).
+**`sessions`**: `id` (UUIDv7), `user_id`, `token_hash` (unique), `csrf_token_hash`, `created_at`, `last_seen_at`, `expires_at` (absolute), `revoked_at`, `revoked_reason`, `ip` (nullable), `user_agent` (nullable). Foreign key to `users` with `ON DELETE RESTRICT`. Index on `user_id` and index on `expires_at`. Grants for `hms_app`: `SELECT, INSERT, UPDATE, DELETE`. No `updated_at` column; no trigger.
 
 `audit_log` is created in F5.
+
+**Design Deviations & Hardening:**
+
+- `sessions.ip` and `sessions.user_agent`: nullable (accommodating environments or automated calls without IP/User-Agent headers).
+- `roles.description`: `NOT NULL` (requiring documented semantics for every role).
+- `status`: PostgreSQL enum type `user_status` (`@@map("user_status")`) per Rule 03 line 37.
+- Database CHECK constraints:
+  - `users_username_format`: `CHECK (username = lower(username) AND username ~ '^[a-z0-9._-]{3,32}$')`
+  - `users_email_lowercase`: `CHECK (email IS NULL OR email = lower(email))`
+  - `users_failed_login_count_nonnegative`: `CHECK (failed_login_count >= 0)`
+  - `users_password_hash_format`: `CHECK (password_hash LIKE '$argon2id$%')`
+  - `roles_code_format`: `CHECK (code ~ '^[a-z][a-z0-9_]{1,49}$')`
+  - `permissions_code_format`: `CHECK (code ~ '^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$')`
+  - `permissions_module_prefix`: `CHECK (split_part(code, '.', 1) = module)`
+- Version trigger omitted: optimistic locking remains in service layer (`WHERE id = $id AND version = $expected_version`) to avoid login counters creating spurious conflicts (ADR-023).
+- Test database separation: `TEST_DATABASE_URL` (hms_app) and `TEST_DATABASE_MIGRATION_URL` (hms_owner) pointing to `hms_test`. Cleaner executes `SELECT current_database()` and hard-refuses on non-`hms_test` connections (ADR-025).
+- Password hashing: `argon2@0.45.1` (MIT), only built dependency, OWASP floor enforced in `env.schema.ts` (`ARGON2_MEMORY >= 19456`, `ARGON2_ITERATIONS >= 3`, `ARGON2_PARALLELISM >= 1`), default `m=65536, t=3, p=4` (ADR-024).
 
 **Permission catalog (foundation):**
 
@@ -100,9 +122,27 @@ Actions on your own account (login, logout, change own password, view/revoke own
 
 **Default roles:** `admin` (all foundation permissions; `is_system`), and empty system roles `receptionist`, `nurse`, `doctor`, `pharmacist`, `lab_technician`, `cashier`. Later phases add each role's permissions through their own seeds.
 
-**Seeds (`db:seed:required`, idempotent):** sync permission catalog, ensure default roles, ensure the first admin exists (`username: admin`, random one-time password printed once to the console, `must_change_password = true`).
+**Seeds (`db:seed:required`, idempotent):**
 
-Acceptance: migrations apply; grants verified by test; seeds are idempotent; permission catalog test passes.
+- Compiles via `pnpm build` to `apps/api/dist/database/seeds/cli.js`; executed via `node scripts/run-seed.mjs` (or `pnpm db:seed:required`). Zero runtime dev tooling.
+- Syncs permission catalog (upsert; reports orphans without deletion).
+- Ensures default system roles (creates missing; never overwrites existing names or descriptions).
+- Ensures admin role has all foundation permissions (never removes permissions).
+- Ensures first admin user in atomic transaction (`username: admin`, 24-character unambiguous alphanumeric password generated with `crypto.randomInt`, `must_change_password = true`, printed once to console by CLI, never printed during tests).
+
+**Tests:**
+
+1. `apps/api/test/db-reset-guard.spec.ts`: safety reset guard (now importing renamed `.mts` cleanly).
+2. `apps/api/test/permissions.spec.ts`: permission catalog uniqueness, regex format, module prefix matching.
+3. `apps/api/test/identity/constraints.spec.ts`: full valid/invalid test suite for all CHECK and UNIQUE constraints; constraint definitions verified against `@hms/shared` regex patterns via `pg_get_constraintdef`.
+4. `apps/api/test/identity/grants.spec.ts`: exact 7-privilege grant matrix test via `has_table_privilege`; PUBLIC zero-privilege check via `pg_class.relacl` `aclexplode`; functional DELETE/TRUNCATE/UPDATE permission enforcement for `hms_app`.
+5. `apps/api/test/identity/catalog-completeness.spec.ts`: catalog equals table; admin role completeness (`user_roles -> roles -> role_permissions -> permissions`).
+6. `apps/api/test/identity/uuid-v7-and-triggers.spec.ts`: UUIDv7 version nibble 7 and variant test; `updated_at` trigger verification on `users` and `roles`; absence of triggers on `sessions` and `permissions`.
+7. `apps/api/test/identity/seed.spec.ts`: seed idempotency; midway transaction failure leaves no partial state; admin permissions never removed; role descriptions never overwritten; no cleartext password in database columns.
+8. `apps/api/test/identity/test-cleaner.spec.ts`: cleaner hard-refusal if `SELECT current_database()` is not `hms_test`.
+9. `apps/api/src/config/env.schema.spec.ts`: Argon2id parameters validation (defaults, prod/dev floor, test relaxation).
+
+Acceptance: migrations apply from empty database; grants verified by test; seeds are idempotent; permission catalog test passes; drift check clean with shadow database.
 
 ## F4 — Authentication
 

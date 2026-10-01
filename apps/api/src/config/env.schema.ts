@@ -9,68 +9,108 @@ import { z } from 'zod';
  *
  * All variables from docs/02-foundation-spec.md are defined here.
  */
-const envSchema = z.object({
-  /** Node environment */
-  NODE_ENV: z
-    .enum(['development', 'test', 'production'])
-    .default('development'),
+const envSchema = z
+  .object({
+    /** Node environment */
+    NODE_ENV: z
+      .enum(['development', 'test', 'production'])
+      .default('development'),
 
-  /** API server port */
-  PORT: z.coerce.number().int().positive().default(3000),
+    /** API server port */
+    PORT: z.coerce.number().int().positive().default(3000),
 
-  /** Allowed origin for Origin header checks (no CORS) */
-  APP_ORIGIN: z.url().default('http://localhost:5173'),
+    /** Allowed origin for Origin header checks (no CORS) */
+    APP_ORIGIN: z.url().default('http://localhost:5173'),
 
-  /** Runtime database URL (least-privilege hms_app role) */
-  DATABASE_URL: z.string().min(1),
+    /** Runtime database URL (least-privilege hms_app role) */
+    DATABASE_URL: z.string().min(1),
 
-  /** Migration database URL (hms_owner role) — used only by migration tooling */
-  DATABASE_MIGRATION_URL: z.string().min(1),
+    /** Migration database URL (hms_owner role) — used only by migration tooling */
+    DATABASE_MIGRATION_URL: z.string().min(1),
 
-  /** Prisma shadow database URL for migrate dev */
-  SHADOW_DATABASE_URL: z.string().min(1).optional(),
+    /** Prisma shadow database URL for migrate dev */
+    SHADOW_DATABASE_URL: z.string().min(1).optional(),
 
-  /** Session idle timeout in minutes */
-  SESSION_IDLE_MINUTES: z.coerce.number().int().positive().default(15),
+    /** Session idle timeout in minutes */
+    SESSION_IDLE_MINUTES: z.coerce.number().int().positive().default(15),
 
-  /** Session absolute timeout in hours */
-  SESSION_ABSOLUTE_HOURS: z.coerce.number().int().positive().default(12),
+    /** Session absolute timeout in hours */
+    SESSION_ABSOLUTE_HOURS: z.coerce.number().int().positive().default(12),
 
-  /** Max consecutive login failures before account lockout */
-  LOGIN_MAX_FAILURES: z.coerce.number().int().positive().default(5),
+    /** Max consecutive login failures before account lockout */
+    LOGIN_MAX_FAILURES: z.coerce.number().int().positive().default(5),
 
-  /** Account lockout duration in minutes */
-  LOGIN_LOCK_MINUTES: z.coerce.number().int().positive().default(15),
+    /** Account lockout duration in minutes */
+    LOGIN_LOCK_MINUTES: z.coerce.number().int().positive().default(15),
 
-  /** Whether the session cookie requires HTTPS */
-  COOKIE_SECURE: z
-    .enum(['true', 'false'])
-    .transform((val) => val === 'true')
-    .default(false),
+    /** Whether the session cookie requires HTTPS */
+    COOKIE_SECURE: z
+      .enum(['true', 'false'])
+      .transform((val) => val === 'true')
+      .default(false),
 
-  /** Application log level */
-  LOG_LEVEL: z
-    .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
-    .default(process.env.NODE_ENV === 'test' ? 'silent' : 'info'),
+    /** Application log level */
+    LOG_LEVEL: z
+      .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
+      .default(process.env.NODE_ENV === 'test' ? 'silent' : 'info'),
 
-  /** IANA timezone name for the hospital */
-  HOSPITAL_TIMEZONE: z.string().min(1).default('UTC'),
+    /** IANA timezone name for the hospital */
+    HOSPITAL_TIMEZONE: z.string().min(1).default('UTC'),
 
-  /** Default locale for i18n */
-  DEFAULT_LOCALE: z.string().min(1).default('en'),
+    /** Default locale for i18n */
+    DEFAULT_LOCALE: z.string().min(1).default('en'),
 
-  /** Toggle Swagger UI at /api/docs */
-  SWAGGER_ENABLED: z
-    .enum(['true', 'false'])
-    .transform((val) => val === 'true')
-    .default(false),
+    /** Toggle Swagger UI at /api/docs */
+    SWAGGER_ENABLED: z
+      .enum(['true', 'false'])
+      .transform((val) => val === 'true')
+      .default(false),
 
-  /** Rate limiting window in milliseconds */
-  THROTTLE_TTL_MS: z.coerce.number().int().positive().default(60_000),
+    /** Rate limiting window in milliseconds */
+    THROTTLE_TTL_MS: z.coerce.number().int().positive().default(60_000),
 
-  /** Rate limiting max requests per window */
-  THROTTLE_LIMIT: z.coerce.number().int().positive().default(100),
-});
+    /** Rate limiting max requests per window */
+    THROTTLE_LIMIT: z.coerce.number().int().positive().default(100),
+
+    /** Argon2id memory cost in KiB (default: 65536 = 64 MiB per RFC 9106 second recommended profile) */
+    ARGON2_MEMORY: z.coerce.number().int().positive().default(65536),
+
+    /** Argon2id time cost / iterations (default: 3) */
+    ARGON2_ITERATIONS: z.coerce.number().int().positive().default(3),
+
+    /** Argon2id parallelism / threads (default: 4) */
+    ARGON2_PARALLELISM: z.coerce.number().int().positive().default(4),
+  })
+  .superRefine((data, ctx) => {
+    const isTest = data.NODE_ENV === 'test';
+    const minMemory = isTest ? 1024 : 19456; // 19 MiB OWASP floor in prod/dev
+    const minIterations = isTest ? 1 : 3;
+    const minParallelism = 1;
+
+    if (data.ARGON2_MEMORY < minMemory) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `ARGON2_MEMORY must be at least ${String(minMemory)} KiB in ${data.NODE_ENV} environment (got ${String(data.ARGON2_MEMORY)})`,
+        path: ['ARGON2_MEMORY'],
+      });
+    }
+
+    if (data.ARGON2_ITERATIONS < minIterations) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `ARGON2_ITERATIONS must be at least ${String(minIterations)} in ${data.NODE_ENV} environment (got ${String(data.ARGON2_ITERATIONS)})`,
+        path: ['ARGON2_ITERATIONS'],
+      });
+    }
+
+    if (data.ARGON2_PARALLELISM < minParallelism) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `ARGON2_PARALLELISM must be at least ${String(minParallelism)} in ${data.NODE_ENV} environment (got ${String(data.ARGON2_PARALLELISM)})`,
+        path: ['ARGON2_PARALLELISM'],
+      });
+    }
+  });
 
 type EnvConfig = z.infer<typeof envSchema>;
 

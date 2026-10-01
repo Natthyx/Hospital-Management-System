@@ -68,6 +68,50 @@ describe('validateEnv', () => {
     expect(config.PORT).toBe(8080);
     expect(config.THROTTLE_LIMIT).toBe(50);
   });
+
+  it('validates default Argon2id parameters matching RFC 9106 second recommended profile', () => {
+    const config = validateEnv({
+      ...validBaseEnv,
+    });
+
+    expect(config.ARGON2_MEMORY).toBe(65536);
+    expect(config.ARGON2_ITERATIONS).toBe(3);
+    expect(config.ARGON2_PARALLELISM).toBe(4);
+  });
+
+  it('enforces OWASP floor of 19456 KiB and 3 iterations in development and production', () => {
+    // Memory below floor
+    expect(() =>
+      validateEnv({
+        ...validBaseEnv,
+        NODE_ENV: 'development',
+        ARGON2_MEMORY: '19455',
+      }),
+    ).toThrow('ARGON2_MEMORY must be at least 19456 KiB');
+
+    // Iterations below floor
+    expect(() =>
+      validateEnv({
+        ...validBaseEnv,
+        NODE_ENV: 'production',
+        ARGON2_ITERATIONS: '2',
+      }),
+    ).toThrow('ARGON2_ITERATIONS must be at least 3');
+  });
+
+  it('allows relaxed Argon2id parameters in test environment for fast execution', () => {
+    const config = validateEnv({
+      ...validBaseEnv,
+      NODE_ENV: 'test',
+      ARGON2_MEMORY: '1024',
+      ARGON2_ITERATIONS: '1',
+      ARGON2_PARALLELISM: '1',
+    });
+
+    expect(config.ARGON2_MEMORY).toBe(1024);
+    expect(config.ARGON2_ITERATIONS).toBe(1);
+    expect(config.ARGON2_PARALLELISM).toBe(1);
+  });
 });
 
 describe('loadRootEnv', () => {

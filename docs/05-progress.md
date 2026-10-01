@@ -4,13 +4,13 @@ The agent updates this file at the end of every task. The owner signs off milest
 
 ## Current milestone
 
-**F3 Identity Data Model** (status: in-progress)
+**F3 Identity Data Model** (status: implemented, pending owner sign-off)
 
 ## Phase 0 — Foundation
 
 - [x] F1 Repo and tooling (F1 signed off by owner: 2026-09-30)
 - [x] F2 API skeleton (F2 signed off by owner: 2026-09-30)
-- [ ] F3 Identity data model
+- [ ] F3 Identity data model (implemented, pending owner sign-off)
 - [ ] F4 Authentication
 - [ ] F5 Audit module
 - [ ] F6 Web skeleton
@@ -33,6 +33,25 @@ Owner sign-off for Phase 0: _pending_
 ## Log (newest first)
 
 Format: `YYYY-MM-DD — milestone — what was done — tests run — open issues`
+
+2026-10-01 — F3 — Identity data model:
+
+- Housekeeping: Renamed `scripts/db-reset-guard.ts` to `scripts/db-reset-guard.mts` via `git mv` and updated `scripts/db-reset.mjs` to import `.mts`; configured dedicated Jest ESM-to-CJS transformer for `.mts` files (`apps/api/test/mts-transformer.js`); eliminated `MODULE_TYPELESS_PACKAGE_JSON` warning cleanly while keeping 11/11 tests passing.
+- Pinned `argon2` to exact version `0.45.1` (no caret) in `apps/api/package.json`; preserved `@prisma/*` packages in `pnpm.onlyBuiltDependencies` (`["@prisma/client", "@prisma/engines", "prisma", "argon2"]`); registered `argon2` and its 4 transitive dependencies in `docs/THIRD_PARTY_LICENSES.md`; verified all 705 packages compliant with permissive license policy.
+- Shared domain types and catalogs (`packages/shared/src/identity`): defined `ROLE_CODE_REGEX` (`^[a-z][a-z0-9_]{1,49}$`), `PERMISSION_CODE_REGEX` (`^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`), `USER_STATUSES` (`active`, `disabled`), `PERMISSIONS` catalog (11 foundation permissions), and types. Single source of truth across API, frontend, tests, and database constraints.
+- Database schema & migrations: updated `apps/api/prisma/schema.prisma` preserving F2 datasource configuration (`DATABASE_MIGRATION_URL` and `SHADOW_DATABASE_URL`). Created migration `20261001000000_identity_data_model`:
+  - 6 tables: `users`, `roles`, `permissions`, `role_permissions`, `user_roles`, `sessions`.
+  - Application-generated UUIDv7 via `@id @default(uuid(7)) @db.Uuid` without database defaults.
+  - Mapped enum `user_status` (`active`, `disabled`).
+  - Strict CHECK constraints on usernames, emails, codes, statuses, and Argon2id hash prefix.
+  - Foreign keys with explicit `ON DELETE RESTRICT` and `ON UPDATE CASCADE` across all tables (including `sessions`).
+  - Least-privilege grants for `hms_app`: `INSERT/SELECT/UPDATE` on entities, `INSERT/SELECT/DELETE` on join tables, `INSERT/SELECT/UPDATE/DELETE` on sessions. Zero `DELETE` or `TRUNCATE` on entities; zero `UPDATE` on join tables. Verified `PUBLIC` has zero privileges via `pg_class.relacl` `aclexplode`.
+  - Reusable `set_updated_at` trigger attached only to tables containing `updated_at`. Omitted `enforce_version_increment` trigger per ADR-023 to avoid locking conflicts with login counter updates in F4.
+- Test database isolation & safety: added `TEST_DATABASE_URL` and `TEST_DATABASE_MIGRATION_URL` safeguards. `jest.config.js` fails loudly if missing or not pointing to `hms_test`. Automatically maps test URLs onto `DATABASE_URL` and `DATABASE_MIGRATION_URL` for the test process only. Jest `globalSetup` runs `prisma migrate deploy` as owner against `hms_test`. Test cleaner strictly checks `SELECT current_database() === 'hms_test'` over the active connection. All test suites run sequentially (`--runInBand`).
+- Required seed (`pnpm db:seed:required`): runnable via standalone CLI (`node apps/api/dist/database/seeds/cli.js`), checks if `dist` exists and exits with clear error ("Run pnpm build first") if absent. Upserts permissions, creates default roles without overwriting descriptions, ensures admin has all permissions, and creates admin user + assigns admin role in ONE atomic transaction with 24-character unambiguous password (`crypto.randomInt`, no `O, 0, o, l, 1, I`). Idempotent on second run. Tested for concurrent race safety and atomic rollback on midway crash.
+- Drift check command: added `pnpm db:check:drift` to `package.json` and CI workflow; verified zero drift against migrations.
+- Updated documentation and ADRs: added ADR-023 (Identity Schema & Concurrency Strategy), ADR-024 (Password Hashing with Argon2id), and ADR-025 (Test Database Isolation & Safety Safeguards) to `docs/04-decisions.md`. Updated `docs/02-foundation-spec.md` with complete F3 specifications and test suite catalog.
+  — Tests run: `pnpm lint` ✓, `pnpm typecheck` ✓, `pnpm test` (21 suites, 128 tests) ✓, `pnpm build` ✓, `pnpm check:licenses` (705 packages) ✓, `pnpm audit --audit-level=high` ✓, `pnpm db:check:drift` ✓.
 
 2026-09-30 — F2 — API skeleton (Defect Fixes & Owner Verification Response):
 
@@ -58,17 +77,20 @@ Format: `YYYY-MM-DD — milestone — what was done — tests run — open issue
 
 ## Open questions for the owner
 
-_(None. All F2 defect fixes and requirements implemented and verified.)_
+_(None. Milestone F3 implemented and verified. Pending owner review and sign-off.)_
 
 ## Ideas / follow-ups (not in scope yet)
 
 - Phase 8 must ship a third-party notices file containing license texts for all included dependencies.
 - Phase 8 needs a TLS / HSTS / CSP upgrade-insecure-requests plan for hospital LAN installs that may run over plain HTTP.
 - Enable the route-audit and default-deny tests to accept the real `AuthGuard` in F4.
+- CLI command to recover a lost sole-admin password (target: F4 or Phase 8).
+- Phase 8 packaging must ship the correct argon2 prebuilt binary for the target platform (glibc vs musl).
+- F4 must cap concurrent argon2 hashing (each hash uses 64 MiB) with a small queue.
 
 ## Known issues
 
 - **Audit finding (moderate, non-blocking):** `js-yaml` (GHSA-r3ph-w7gj-g6xm) via `@nestjs/swagger`. In this project, `@nestjs/swagger` uses `js-yaml` only when serializing OpenAPI documents to YAML format; our application serves Swagger UI dynamically using JSON and does not parse untrusted YAML input. Per instructions, no override is added; will be upgraded when `@nestjs/swagger` ships a release with a patched `js-yaml`.
 - **Placeholder scripts:** `build` in `apps/web` prints a notice and exits 0 until F6.
 - **E2E placeholder:** `test:e2e` prints a notice and exits 0 until Playwright setup in F6.
-- **Database stubs:** `db:seed:required` and `db:seed:dev` exit non-zero until seeds are added in F3.
+- **Database stubs:** `db:seed:required` is implemented in F3. `db:seed:dev` prints an error and exits non-zero until dev seeds are added in later milestones.
