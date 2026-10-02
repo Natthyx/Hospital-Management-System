@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { APP_GUARD, APP_FILTER, APP_PIPE, APP_INTERCEPTOR } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { ZodSerializerInterceptor } from 'nestjs-zod';
@@ -35,6 +36,7 @@ import { HealthModule } from './modules/health';
     AuditModule,
     HealthModule,
     AuthModule,
+    ScheduleModule.forRoot(),
     ThrottlerModule.forRootAsync({
       inject: [ENV_CONFIG],
       useFactory: (env: EnvConfig) => [
