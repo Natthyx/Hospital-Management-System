@@ -157,11 +157,15 @@ Endpoints (`/api/v1`):
 | GET    | `/auth/sessions`        | Authenticated         | Own active sessions                                                           |
 | DELETE | `/auth/sessions/:id`    | Authenticated         | Revoke own session                                                            |
 
-Behavior per rule 04: argon2id, generic errors, lockout, idle/absolute timeout, cookie flags, CSRF token and Origin check, session rotation, forced password change (all endpoints except `/auth/me`, `/auth/change-password`, `/auth/logout` are refused while `must_change_password` is true).
+Behavior per rule 04: argon2id password hashing via concurrency limiter (`Argon2LimiterService`), generic 401 errors, atomic account lockout (15 min after 5 failures without lock extension), idle (15 min) and absolute (12 hour) timeouts, browser-session cookie (`hms_session`, httpOnly, SameSite=Strict, Path=/, no maxAge/expires), per-session plaintext CSRF token stored in `sessions.csrf_token` and verified via `crypto.timingSafeEqual` with length pre-check, Origin verification via `OriginGuard`, session rotation on login/password change, forced password change gate (all endpoints except `/auth/me`, `/auth/change-password`, `/auth/logout` return 403 `PASSWORD_CHANGE_REQUIRED` while `must_change_password` is true).
 
-Guards and decorators: `AuthGuard` (global), `PermissionGuard`, `@RequirePermission(code)`, `@Public()`, `@CurrentUser()`.
+Scheduled cleanup: `SessionCleanupService` runs hourly (`@Cron('0 * * * *')`) via `@nestjs/schedule` (6.1.3), deleting sessions where `expires_at < now - 30 days OR (revoked_at IS NOT NULL AND revoked_at < now - 30 days)`.
 
-Acceptance: full permission matrix tests; route-audit test proves every route is protected or `@Public()`; lockout and timeout tests; no secrets in responses or logs.
+Emergency recovery: `pnpm admin:reset-password --username <username> [--force]` resets password to a compliant temporary password, increments version, revokes active sessions with reason `admin_recovery_reset`, clears lockout counters, and emits an audit event.
+
+Guards and decorators: `ThrottlerGuard` -> `OriginGuard` -> `AuthGuard` -> `PermissionGuard`, `@RequirePermission(code)`, `@Authenticated()`, `@Public()`, `@CurrentUser()`, `@AllowPasswordChange()`.
+
+Acceptance: full permission matrix tests; route-audit test proves every route is protected or `@Public()`; lockout and timeout tests; scheduled cleanup tests; emergency recovery CLI tests; no secrets in responses or logs.
 
 ## F5 — Audit module
 

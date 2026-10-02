@@ -6,7 +6,8 @@
     "build": "tsc -p tsconfig.build.json",
     "test": "jest --runInBand",
     "typecheck": "tsc --noEmit",
-    "dev": "nest start --watch"
+    "dev": "nest start --watch",
+    "admin:reset-password": "node ../../scripts/admin-reset-password.mjs"
   },
   "dependencies": {
     "@hms/shared": "workspace:*",

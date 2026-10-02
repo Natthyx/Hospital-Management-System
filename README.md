@@ -47,6 +47,7 @@ pnpm check:licenses
 | `pnpm db:seed:required`       | Sync permissions, default roles, first admin _(F3)_                  |
 | `pnpm db:seed:dev`            | Load synthetic dev data (stub until domain milestones)               |
 | `pnpm db:reset`               | Drop schema and re-apply migrations (dev only; does not seed) _(F2)_ |
+| `pnpm admin:reset-password`   | Emergency admin CLI password reset & session revocation _(F4)_       |
 | `pnpm dev`                    | Run API + web dev servers _(F2/F6)_                                  |
 | `pnpm lint`                   | ESLint across all packages                                           |
 | `pnpm typecheck`              | TypeScript type checking                                             |

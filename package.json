@@ -31,6 +31,7 @@
     "test": "pnpm --filter @hms/api test",
     "test:e2e": "echo 'NOTICE: test:e2e not implemented until F6' && exit 0",
     "build": "pnpm -r run build",
+    "admin:reset-password": "node scripts/admin-reset-password.mjs",
     "check:licenses": "node scripts/check-licenses.mjs",
     "prepare": "(husky 2>/dev/null || true) && node scripts/prisma.mjs generate && pnpm --filter @hms/shared build"
   },

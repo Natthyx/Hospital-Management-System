@@ -68,6 +68,8 @@ GPL (any version), LGPL, AGPL, SSPL, BUSL, Commons Clause, Elastic License, "sou
 | node-addon-api                    | 8.9.0   | MIT        | api                | Node.js C++ addon API bindings (argon2 dep)           | 2026-10-01   |
 | node-gyp-build                    | 4.8.4   | MIT        | api                | Native prebuild loader (argon2 dep)                   | 2026-10-01   |
 | cookie                            | 0.7.2   | MIT        | api                | HTTP cookie parser & serializer (direct dep)          | 2026-10-02   |
+| @nestjs/schedule                  | 6.1.3   | MIT        | api                | In-process scheduled task runner (session purge)      | 2026-10-02   |
+| cron                              | 4.4.0   | MIT        | api                | Cron pattern parsing and job runner (@nestjs/sched)   | 2026-10-02   |
 | wikimedia/common-passwords (data) | 1.0.0   | MIT        | api                | Password blocklist dataset (length >= 10, 2312 words) | 2026-10-02   |
 
 ## Bundled Data Assets

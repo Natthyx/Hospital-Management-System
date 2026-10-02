@@ -4,14 +4,14 @@ The agent updates this file at the end of every task. The owner signs off milest
 
 ## Current milestone
 
-**F4 Authentication** (status: in-progress)
+**F4 Authentication** (status: complete — pending owner sign-off)
 
 ## Phase 0 — Foundation
 
 - [x] F1 Repo and tooling (F1 signed off by owner: 2026-09-30)
 - [x] F2 API skeleton (F2 signed off by owner: 2026-09-30)
 - [x] F3 Identity data model (F3 signed off by owner: 2026-10-01)
-- [ ] F4 Authentication (in-progress)
+- [x] F4 Authentication (implemented; pending owner sign-off)
 - [ ] F5 Audit module
 - [ ] F6 Web skeleton
 - [ ] F7 Admin screens
@@ -33,6 +33,33 @@ Owner sign-off for Phase 0: _pending_
 ## Log (newest first)
 
 Format: `YYYY-MM-DD — milestone — what was done — tests run — open issues`
+
+2026-10-02 — F4 — Authentication:
+
+- Migration `20261002000000_auth_csrf_token`: Renamed `sessions.csrf_token_hash` to `sessions.csrf_token` via PostgreSQL migration. Raw random 32-byte base64url CSRF token stored in plaintext in `sessions.csrf_token` per ADR-026.
+- Password policy and blocklist:
+  - Provenance verification: Verified primary provenance of `wikimedia/mediawiki-libs-CommonPasswords` (MIT) derived from Daniel Miessler's `SecLists/blob/aad07ff/Passwords/10_million_password_list_top_100000.txt` (MIT), originating from Mark Burnett's 2015 10M public-domain dataset. Registered in `docs/THIRD_PARTY_LICENSES.md`.
+  - Bundled 2,312 entries (length >= 10, normalized lowercase NFKC) as `COMMON_PASSWORDS_SET` in `apps/api/src/modules/auth/data/password-blocklist.data.ts`.
+  - Pure validation in `packages/shared/src/identity/password-rules.ts`: 10–128 chars, NFKC normalization, username containment rejection, run limits (identicals, character sequences, keyboard patterns >= 6), at least 6 distinct characters, and blocklist rejection.
+- Concurrency limiter (`Argon2LimiterService`): Bounded concurrent Argon2id hashing operations (default concurrency 2, queue capacity 50, queue timeout 10s) in `apps/api/src/modules/auth/argon2-limiter.service.ts` per ADR-028.
+- Cookies & Types: Added direct dependency `cookie@0.7.2` (MIT). Implemented local type declaration in `apps/api/src/types/cookie.d.ts` declaring only `parse` and `serialize` with zero external `@types/cookie` dependency (ADR-027). Browser-session cookie `hms_session` (httpOnly, SameSite=Strict, Path=/, no Max-Age or Expires; cleared with identical attributes). Ambiguous duplicate cookie rejection.
+- Time abstraction: Injectable `Clock` (`SystemClock`, `TestClock`) in global `TimeModule` (`apps/api/src/common/time/`).
+- Global security guards execution sequence:
+  1. `ThrottlerGuard` (rate limiting; auth limit 10/min)
+  2. `OriginGuard` (strict `APP_ORIGIN` validation with `Referer` fallback, ADR-030)
+  3. `AuthGuard` (session lookup, constant-time CSRF verification via `crypto.timingSafeEqual` with length pre-check, idle timeout 15m, absolute timeout 12h, user active check, duplicate cookie check, and `must_change_password` gate)
+  4. `PermissionGuard` (validates permissions from session context; default deny)
+- Endpoints (`/api/v1/auth`):
+  - `POST /auth/login`: Atomic lockout evaluation in single SQL UPDATE statement; generic 401 on login failure; no Set-Cookie when locked or failed; session replacement revocation on re-login; returns user, permissions, and CSRF token.
+  - `POST /auth/logout`: Revokes active session in database and clears session cookie.
+  - `GET /auth/me`: Returns current user, permissions, CSRF token, and `mustChangePassword`.
+  - `POST /auth/change-password`: Verifies current password (counting failures toward lockout), validates new password policy, bumps version, revokes all other sessions, rotates session cookie and CSRF token.
+  - `GET /auth/sessions`: Lists own active sessions without token hashes or CSRF tokens.
+  - `DELETE /auth/sessions/:id`: Revokes own session (with 404 on IDOR attempts).
+- Scheduled session retention cleanup: `SessionCleanupService` with `@Cron('0 * * * *')` via pinned `@nestjs/schedule@6.1.3` (MIT) purges sessions older than 30 days retention window (`expires_at < now - 30d OR (revoked_at IS NOT NULL AND revoked_at < now - 30d)`). Cron execution bypassed in `NODE_ENV === 'test'` (ADR-029).
+- Admin emergency recovery CLI: Implemented `pnpm admin:reset-password --username <username> [--force]` (`scripts/admin-reset-password.mjs` and `apps/api/src/modules/auth/admin-recovery.ts`). Validates TTY or `--force`, requires typing username to confirm, increments user version, revokes active sessions with `admin_recovery_reset`, clears lockout counters, generates compliant temporary password, emits `auth.admin_recovery_reset` audit event, prints security notice to stderr and temporary password to stdout.
+- Documentation & ADRs: Added ADR-026 (CSRF Defense), ADR-027 (Browser-Session Cookie), ADR-028 (Account Lockout & Concurrency Limiting), ADR-029 (Session Retention & Scheduled Purge), and ADR-030 (OriginGuard & Proxy). Updated Rule 01 error codes (`PASSWORD_CHANGE_REQUIRED`, `INVALID_CURRENT_PASSWORD`), `docs/02-foundation-spec.md`, and `docs/THIRD_PARTY_LICENSES.md`.
+  — Tests run: `pnpm lint` ✓, `pnpm typecheck` ✓, `pnpm test` (29 suites, 200 tests) ✓, `pnpm build` ✓, `pnpm check:licenses` (709 packages) ✓.
 
 2026-10-01 — F3 — Identity data model:
 
@@ -77,16 +104,15 @@ Format: `YYYY-MM-DD — milestone — what was done — tests run — open issue
 
 ## Open questions for the owner
 
-_(None. Milestone F3 implemented and verified. Pending owner review and sign-off.)_
+_(None. Milestone F4 implemented and verified across 4 commits. Ready for owner review and sign-off.)_
 
 ## Ideas / follow-ups (not in scope yet)
 
 - Phase 8 must ship a third-party notices file containing license texts for all included dependencies.
-- Phase 8 needs a TLS / HSTS / CSP upgrade-insecure-requests plan for hospital LAN installs that may run over plain HTTP.
-- Enable the route-audit and default-deny tests to accept the real `AuthGuard` in F4.
-- CLI command to recover a lost sole-admin password (target: F4 or Phase 8).
+- Phase 8 needs a TLS / HSTS / CSP upgrade-insecure-requests plan for hospital LAN installs (production requires `COOKIE_SECURE=true` and an `https` `APP_ORIGIN`).
 - Phase 8 packaging must ship the correct argon2 prebuilt binary for the target platform (glibc vs musl).
-- F4 must cap concurrent argon2 hashing (each hash uses 64 MiB) with a small queue.
+- F7 will add an admin unlock endpoint/screen (to reset lockout counters without changing passwords).
+- Audit log rows in F5 (`audit_log.session_id`) must not place a database foreign key to `sessions.id` to allow 30-day session purge per ADR-029.
 
 ## Known issues
 
