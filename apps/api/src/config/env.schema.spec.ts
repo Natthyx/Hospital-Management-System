@@ -108,9 +108,52 @@ describe('validateEnv', () => {
       ARGON2_PARALLELISM: '1',
     });
 
-    expect(config.ARGON2_MEMORY).toBe(1024);
-    expect(config.ARGON2_ITERATIONS).toBe(1);
-    expect(config.ARGON2_PARALLELISM).toBe(1);
+    expect(config.AUTH_THROTTLE_LIMIT).toBe(10);
+    expect(config.AUTH_THROTTLE_TTL_MS).toBe(60000);
+    expect(config.ARGON2_MAX_CONCURRENCY).toBe(2);
+    expect(config.ARGON2_MAX_QUEUE).toBe(50);
+    expect(config.ARGON2_QUEUE_TIMEOUT_MS).toBe(10000);
+    expect(config.TRUST_PROXY).toBe(0);
+  });
+
+  describe('Production security safeguards (Condition 10)', () => {
+    const validProdEnv = {
+      ...validBaseEnv,
+      NODE_ENV: 'production',
+      COOKIE_SECURE: 'true',
+      APP_ORIGIN: 'https://hms.hospital.org',
+    };
+
+    it('accepts valid production configuration', () => {
+      const config = validateEnv(validProdEnv);
+      expect(config.COOKIE_SECURE).toBe(true);
+      expect(config.APP_ORIGIN).toBe('https://hms.hospital.org');
+    });
+
+    it('fails boot in production if COOKIE_SECURE is false', () => {
+      expect(() =>
+        validateEnv({
+          ...validProdEnv,
+          COOKIE_SECURE: 'false',
+        }),
+      ).toThrow('COOKIE_SECURE must be true in production');
+    });
+
+    it('fails boot in production if APP_ORIGIN uses default localhost or non-https', () => {
+      expect(() =>
+        validateEnv({
+          ...validProdEnv,
+          APP_ORIGIN: 'http://localhost:5173',
+        }),
+      ).toThrow('APP_ORIGIN must use https:// in production');
+
+      expect(() =>
+        validateEnv({
+          ...validProdEnv,
+          APP_ORIGIN: 'http://hms.hospital.org',
+        }),
+      ).toThrow('APP_ORIGIN must use https:// in production');
+    });
   });
 });
 

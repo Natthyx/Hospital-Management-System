@@ -80,12 +80,63 @@ const envSchema = z
 
     /** Argon2id parallelism / threads (default: 4) */
     ARGON2_PARALLELISM: z.coerce.number().int().positive().default(4),
+
+    /** Auth rate limiting max requests per window (default: 10 per minute per IP) */
+    AUTH_THROTTLE_LIMIT: z.coerce.number().int().positive().default(10),
+
+    /** Auth rate limiting window in milliseconds (default: 60,000ms = 1 minute) */
+    AUTH_THROTTLE_TTL_MS: z.coerce.number().int().positive().default(60_000),
+
+    /** Max concurrent Argon2 operations (default: 2 to preserve libuv worker threads) */
+    ARGON2_MAX_CONCURRENCY: z.coerce.number().int().min(1).default(2),
+
+    /** Max queued Argon2 operations before immediate 503 fast-fail (default: 50) */
+    ARGON2_MAX_QUEUE: z.coerce.number().int().min(1).default(50),
+
+    /** Max wait time in milliseconds for queued Argon2 operations (default: 10,000ms) */
+    ARGON2_QUEUE_TIMEOUT_MS: z.coerce.number().int().min(100).default(10_000),
+
+    /** Number of reverse proxy hops to trust (0 = direct connection / off) */
+    TRUST_PROXY: z.coerce.number().int().min(0).default(0),
   })
   .superRefine((data, ctx) => {
     const isTest = data.NODE_ENV === 'test';
+    const isProd = data.NODE_ENV === 'production';
     const minMemory = isTest ? 1024 : 19456; // 19 MiB OWASP floor in prod/dev
     const minIterations = isTest ? 1 : 3;
     const minParallelism = 1;
+
+    // Production security safeguards
+    if (isProd) {
+      if (!data.COOKIE_SECURE) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'COOKIE_SECURE must be true in production',
+          path: ['COOKIE_SECURE'],
+        });
+      }
+
+      try {
+        const originUrl = new URL(data.APP_ORIGIN);
+        if (
+          originUrl.protocol !== 'https:' ||
+          data.APP_ORIGIN === 'http://localhost:5173'
+        ) {
+          ctx.addIssue({
+            code: 'custom',
+            message:
+              'APP_ORIGIN must use https:// in production and cannot use localhost default',
+            path: ['APP_ORIGIN'],
+          });
+        }
+      } catch {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'APP_ORIGIN must be a valid URL',
+          path: ['APP_ORIGIN'],
+        });
+      }
+    }
 
     if (data.ARGON2_MEMORY < minMemory) {
       ctx.addIssue({

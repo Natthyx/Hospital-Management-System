@@ -33,13 +33,21 @@ export const INTERNAL_ERROR = 'INTERNAL_ERROR' as const;
 /** 503 — Service unavailable (e.g. database unreachable) */
 export const SERVICE_UNAVAILABLE = 'SERVICE_UNAVAILABLE' as const;
 
+/** 400 — Incorrect current password on password change */
+export const INVALID_CURRENT_PASSWORD = 'INVALID_CURRENT_PASSWORD' as const;
+
+/** 403 — Password change required before accessing requested resource */
+export const PASSWORD_CHANGE_REQUIRED = 'PASSWORD_CHANGE_REQUIRED' as const;
+
 /**
  * All error codes as a union type for compile-time checking.
  */
 export type ErrorCode =
   | typeof VALIDATION_FAILED
+  | typeof INVALID_CURRENT_PASSWORD
   | typeof UNAUTHENTICATED
   | typeof FORBIDDEN
+  | typeof PASSWORD_CHANGE_REQUIRED
   | typeof NOT_FOUND
   | typeof CONFLICT
   | typeof VERSION_CONFLICT

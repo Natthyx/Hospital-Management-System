@@ -45,8 +45,8 @@ pnpm check:licenses
 | `pnpm db:up` / `pnpm db:down` | Start/stop dev PostgreSQL (Docker)                                   |
 | `pnpm db:migrate`             | Apply Prisma migrations _(F2)_                                       |
 | `pnpm db:seed:required`       | Sync permissions, default roles, first admin _(F3)_                  |
-| `pnpm db:seed:dev`            | Load synthetic dev data _(F3)_                                       |
-| `pnpm db:reset`               | Drop, migrate, seed — requires `docker compose down -v` first _(F2)_ |
+| `pnpm db:seed:dev`            | Load synthetic dev data (stub until domain milestones)               |
+| `pnpm db:reset`               | Drop schema and re-apply migrations (dev only; does not seed) _(F2)_ |
 | `pnpm dev`                    | Run API + web dev servers _(F2/F6)_                                  |
 | `pnpm lint`                   | ESLint across all packages                                           |
 | `pnpm typecheck`              | TypeScript type checking                                             |

@@ -85,6 +85,8 @@ describe('Swagger Documentation and CSP Isolation (Spec C.g)', () => {
       ...baseEnv,
       NODE_ENV: 'production',
       SWAGGER_ENABLED: 'true',
+      COOKIE_SECURE: 'true',
+      APP_ORIGIN: 'https://hms.hospital.org',
     });
 
     const fixtureProduction: TestingModule = await Test.createTestingModule({
