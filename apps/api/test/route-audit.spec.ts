@@ -3,7 +3,11 @@ import { MetadataScanner, ModulesContainer, Reflector } from '@nestjs/core';
 import { Test, type TestingModule } from '@nestjs/testing';
 
 import { AppModule } from '../src/app.module';
-import { IS_PUBLIC_KEY, PERMISSIONS_KEY } from '../src/common';
+import {
+  IS_PUBLIC_KEY,
+  IS_AUTHENTICATED_KEY,
+  PERMISSIONS_KEY,
+} from '../src/common';
 
 describe('Route Security Audit (Spec C.c & Rule 04)', () => {
   let moduleRef: TestingModule;
@@ -40,6 +44,7 @@ describe('Route Security Audit (Spec C.c & Rule 04)', () => {
       method: string;
       routePath: string;
       isPublic: boolean;
+      isAuthenticated: boolean;
       permissions: string[];
     }[] = [];
 
@@ -92,6 +97,15 @@ describe('Route Security Audit (Spec C.c & Rule 04)', () => {
           const isMethodPublic = Boolean(
             reflector.get<boolean | undefined>(IS_PUBLIC_KEY, handler),
           );
+          const isClassAuthenticated = Boolean(
+            reflector.get<boolean | undefined>(
+              IS_AUTHENTICATED_KEY,
+              controllerClass,
+            ),
+          );
+          const isMethodAuthenticated = Boolean(
+            reflector.get<boolean | undefined>(IS_AUTHENTICATED_KEY, handler),
+          );
           const methodPerms: string[] = [];
           const rawMethodPerms: unknown = reflector.get(
             PERMISSIONS_KEY,
@@ -106,6 +120,7 @@ describe('Route Security Audit (Spec C.c & Rule 04)', () => {
           }
 
           const isPublic = isClassPublic || isMethodPublic;
+          const isAuthenticated = isClassAuthenticated || isMethodAuthenticated;
           const permissions: string[] = [...classPerms, ...methodPerms];
 
           auditedRoutes.push({
@@ -113,6 +128,7 @@ describe('Route Security Audit (Spec C.c & Rule 04)', () => {
             method: methodName,
             routePath: String(Reflect.getMetadata(PATH_METADATA, handler)),
             isPublic,
+            isAuthenticated,
             permissions,
           });
         }
@@ -122,10 +138,10 @@ describe('Route Security Audit (Spec C.c & Rule 04)', () => {
     // Verify routes were actually discovered and audited
     expect(auditedRoutes.length).toBeGreaterThan(0);
 
-    // Fail if ANY route lacks both @Public() and @RequirePermission(...)
+    // Fail if ANY route lacks @Public(), @Authenticated(), or @RequirePermission(...)
     for (const route of auditedRoutes) {
       const hasAccessDeclaration =
-        route.isPublic || route.permissions.length > 0;
+        route.isPublic || route.isAuthenticated || route.permissions.length > 0;
       expect({
         route: `${route.controller}.${route.method}`,
         hasAccessDeclaration,

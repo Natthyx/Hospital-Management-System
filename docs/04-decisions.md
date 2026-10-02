@@ -237,6 +237,75 @@ The OWNER approved Python-2.0 (production) and CC-BY-4.0 (dev tooling only) on 2
    **Reason:** Complete test isolation from development data, with fail-fast protection preventing any test from accidentally touching `hms_dev`.
    **Consequences:** Fast, repeatable, and completely safe test suite execution.
 
+## ADR-026 — CSRF Defense and Token Storage
+
+**Status:** Accepted
+**Date:** 2026-10-02
+**Decision:**
+
+1. Rename `sessions.csrf_token_hash` to `sessions.csrf_token` via migration `20261002000000_auth_csrf_token`. Store the raw random per-session CSRF token (32 bytes base64url) in plaintext in `sessions.csrf_token`.
+2. Compare incoming `X-CSRF-Token` header against `sessions.csrf_token` using `crypto.timingSafeEqual` after pre-checking byte lengths. Length mismatch immediately rejects with 403 Forbidden without calling `timingSafeEqual` (preventing exceptions on unequal buffer lengths).
+3. Rotate CSRF token and session identifier on login and password change.
+4. **Why plaintext storage of `csrf_token` is acceptable while the session identifier cookie stays hashed:**
+   The session token is a bearer credential stored in an `httpOnly` cookie; if the database is compromised, hashed session tokens prevent an attacker from impersonating users via hijacked sessions. The CSRF token, by contrast, is NOT a bearer credential and cannot be used alone to authenticate any request. An attacker who has read access to the database already has access to all clinical data, rendering CSRF against those sessions moot. Storing the random CSRF token in plaintext eliminates double hashing overhead on every state-changing request while maintaining full protection against browser cross-origin state-changing attacks.
+   **Reason:** Balances state-of-the-art security against Cross-Site Request Forgery with predictable performance and zero timing-leak attack surface.
+   **Consequences:** All state-changing endpoints (POST, PUT, PATCH, DELETE) strictly require matching `X-CSRF-Token`.
+
+## ADR-027 — Browser-Session Cookie and Type Declarations
+
+**Status:** Accepted
+**Date:** 2026-10-02
+**Decision:**
+
+1. Session cookie name: `hms_session`.
+2. Attributes: `HttpOnly`, `SameSite=Strict`, `Path=/`, and `Secure` conditional on `COOKIE_SECURE=true` (or `NODE_ENV=production`).
+3. Browser-session cookie: explicitly omit `Max-Age` and `Expires`. The cookie naturally expires when the client browser closes, aligning with hospital workstation security. Inactivity (15 min) and absolute (12 hour) timeouts are strictly enforced server-side.
+4. Set-Cookie and clearCookie use identical attributes (`Path=/`, `HttpOnly`, `SameSite=Strict`, matching `Secure`).
+5. Duplicate cookie protection: if a request contains multiple `hms_session` cookies, `AuthGuard` rejects the request with generic 401 `UNAUTHENTICATED` ("Ambiguous session credentials") and clears the cookie to prevent cookie jar poisoning / dual-cookie attacks.
+6. Cookie library: use `cookie` (0.7.2, MIT) as a direct dependency. Provide local type definitions in `apps/api/src/types/cookie.d.ts` declaring only `parse` and `serialize` rather than pulling in `@types/cookie`.
+   **Reason:** Adheres to Rule 04 and Rule 12 with minimal dependencies and robust session handling.
+   **Consequences:** Clean, deterministic cookie serialization and parsing.
+
+## ADR-028 — Account Lockout and Argon2 Concurrency Limiting
+
+**Status:** Accepted
+**Date:** 2026-10-02
+**Decision:**
+
+1. Atomic lockout evaluation: evaluate and update failed login counters inside a single atomic SQL statement (`CASE WHEN locked_until > $now THEN locked_until ...`). Lock account for 15 minutes after 5 consecutive failures. Subsequent failures while locked do NOT extend `locked_until`.
+2. Generic 401 response: on login failure (invalid username, invalid password, locked account, disabled account), return identical generic 401 `UNAUTHENTICATED` with message "Invalid username or password" to prevent username enumeration or lockout discovery. Never set session cookie when account is locked or credentials fail.
+3. Existing active sessions remain valid during login lockout: a brute-force attack on a user's password does not kick an active doctor or nurse out of their currently working workstation session.
+4. Password change failure: incorrect `currentPassword` counts toward lockout counters. If 5 consecutive failures occur on password change, lockout triggers AND the current session is revoked.
+5. Argon2 limiter service (`Argon2LimiterService`): bounds concurrent argon2 operations (default concurrency 2, queue limit 50, queue timeout 10 seconds). Protects the API server from CPU/memory starvation DoS attacks caused by concurrent login attempts.
+   **Reason:** Prevents timing attacks, username enumeration, DoS attacks against memory-hard hashing, and workstation disruption.
+   **Consequences:** Predictable server resource utilization under attack or load.
+
+## ADR-029 — Session Retention and Scheduled Purge
+
+**Status:** Accepted
+**Date:** 2026-10-02
+**Decision:**
+
+1. Retain expired and revoked sessions in PostgreSQL for 30 days before deletion. This window preserves session records for security forensics and incident investigation.
+2. Foreign key restriction: audit log rows in Milestone F5 (`audit_log.session_id`) must NOT place a database foreign key constraint to `sessions.id`, ensuring sessions can be purged after 30 days without breaking audit integrity.
+3. Hourly scheduled purge: `SessionCleanupService` runs hourly via `@nestjs/schedule` (`@Cron('0 * * * *')`). Deletes sessions where `expires_at < now - 30 days OR (revoked_at IS NOT NULL AND revoked_at < now - 30 days)`.
+4. Test mode bypass: when `NODE_ENV === 'test'`, `handleCron()` skips execution so automated tests maintain deterministic control over execution via direct service calls using `TestClock`.
+   **Reason:** Balances security forensic retention with bounded database table growth.
+   **Consequences:** `sessions` table remains compact and indexed over time.
+
+## ADR-030 — OriginGuard and Reverse Proxy Origin Verification
+
+**Status:** Accepted
+**Date:** 2026-10-02
+**Decision:**
+
+1. `OriginGuard` executes globally BEFORE `AuthGuard`.
+2. Validates incoming `Origin` header against `APP_ORIGIN` (default `http://localhost:5173` in development). If `Origin` is missing (common in some browser navigation or same-origin top-level requests), falls back to `Referer` origin matching `APP_ORIGIN`. If neither or mismatched on state-changing methods, immediately returns 403 Forbidden.
+3. For `Origin: null` (such as sandboxed iframes or local privacy modes), requires a valid `Referer` matching `APP_ORIGIN`.
+4. Executes before `AuthGuard` so that malicious cross-origin requests are rejected before session lookups or credential evaluation occur.
+   **Reason:** Robust defense-in-depth against CSRF and cross-origin hijacking before authentication layers run.
+   **Consequences:** Prevents cross-origin state tampering.
+
 ---
 
 ## Template for new entries

@@ -43,6 +43,7 @@ Precedence if files disagree: this file > `.agents/rules/` > `docs/`. If still u
 22. Small, reviewable commits using Conventional Commits.
 23. Do not "improve" things outside the task. Note them in `docs/05-progress.md` under "Ideas / follow-ups" instead.
 24. Never present constructed, reconstructed, illustrative or summarized output as the output of a command you ran. Paste real output, or say you did not run it.
+25. Never run git commit, git push, git merge, git rebase, git tag or any command that changes history or remotes. Leave changes uncommitted and propose a commit message; the owner commits.
 
 ## 3. Fixed stack
 

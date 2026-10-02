@@ -137,6 +137,7 @@ describe('Security Guards, Schema Validation & Error Envelope (e2e)', () => {
   it('Unknown keys: strict Zod DTO returns 400 VALIDATION_FAILED listing unrecognized keys', async () => {
     const res = await request(server)
       .post('/api/v1/test-security/strict-dto')
+      .set('Origin', 'http://localhost:5173')
       .send({
         name: 'Valid Name',
         extraSneakyField: 'malicious-data',
@@ -166,6 +167,7 @@ describe('Security Guards, Schema Validation & Error Envelope (e2e)', () => {
   it('strictSchemaDeclaration: route parameter without a ZodDto is rejected', async () => {
     const res = await request(server)
       .post('/api/v1/test-security/missing-dto')
+      .set('Origin', 'http://localhost:5173')
       .send({ value: 'hello' })
       .expect(500);
     const body = res.body as unknown as ErrorEnvelopeBody;
@@ -182,6 +184,7 @@ describe('Security Guards, Schema Validation & Error Envelope (e2e)', () => {
     it('HTTP 400: includes code VALIDATION_FAILED and requestId', async () => {
       const res = await request(server)
         .post('/api/v1/test-security/strict-dto')
+        .set('Origin', 'http://localhost:5173')
         .send({ name: '' }) // empty string violates min(1)
         .expect(400);
       const body = res.body as unknown as ErrorEnvelopeBody;

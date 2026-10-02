@@ -1,12 +1,16 @@
-export { VALIDATION_FAILED } from './constants/error-codes';
-export { UNAUTHENTICATED } from './constants/error-codes';
-export { FORBIDDEN } from './constants/error-codes';
-export { NOT_FOUND } from './constants/error-codes';
-export { CONFLICT } from './constants/error-codes';
-export { VERSION_CONFLICT } from './constants/error-codes';
-export { RATE_LIMITED } from './constants/error-codes';
-export { INTERNAL_ERROR } from './constants/error-codes';
-export { SERVICE_UNAVAILABLE } from './constants/error-codes';
+export {
+  VALIDATION_FAILED,
+  INVALID_CURRENT_PASSWORD,
+  UNAUTHENTICATED,
+  FORBIDDEN,
+  PASSWORD_CHANGE_REQUIRED,
+  NOT_FOUND,
+  CONFLICT,
+  VERSION_CONFLICT,
+  RATE_LIMITED,
+  INTERNAL_ERROR,
+  SERVICE_UNAVAILABLE,
+} from './constants/error-codes';
 export type { ErrorCode } from './constants/error-codes';
 export {
   healthResponseSchema,
@@ -15,6 +19,36 @@ export {
 export type { HealthResponse, HealthEnvelope } from './schemas/health.schema';
 export { errorEnvelopeSchema } from './schemas/error.schema';
 export type { ErrorEnvelope } from './schemas/error.schema';
+export {
+  currentUserSchema,
+  loginRequestSchema,
+  loginResponseDataSchema,
+  loginResponseSchema,
+  logoutResponseSchema,
+  meResponseDataSchema,
+  meResponseSchema,
+  changePasswordRequestSchema,
+  changePasswordResponseSchema,
+  sessionSummarySchema,
+  sessionsListResponseSchema,
+  sessionIdParamSchema,
+  revokeSessionResponseSchema,
+} from './schemas/auth.schema';
+export type {
+  CurrentUser,
+  LoginRequest,
+  LoginResponseData,
+  LoginResponse,
+  LogoutResponse,
+  MeResponseData,
+  MeResponse,
+  ChangePasswordRequest,
+  ChangePasswordResponse,
+  SessionSummary,
+  SessionsListResponse,
+  SessionIdParam,
+  RevokeSessionResponse,
+} from './schemas/auth.schema';
 export {
   ROLE_CODE_PATTERN,
   ROLE_CODE_REGEX,
@@ -28,3 +62,10 @@ export type {
   PermissionDefinition,
   PermissionCode,
 } from './identity';
+export { REVOKED_REASONS } from './identity/revocation-reasons';
+export type { RevokedReason } from './identity/revocation-reasons';
+export {
+  hasRunOfSixOrMore,
+  validatePasswordPolicy,
+} from './identity/password-rules';
+export type { PasswordValidationResult } from './identity/password-rules';

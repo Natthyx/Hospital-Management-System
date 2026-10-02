@@ -111,6 +111,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
       if (typeof exceptionResponse === 'string') {
         message = exceptionResponse;
       } else if (isRecord(exceptionResponse)) {
+        if (typeof exceptionResponse.code === 'string') {
+          code = exceptionResponse.code as ErrorCode;
+        }
         if (typeof exceptionResponse.message === 'string') {
           message = exceptionResponse.message;
         } else if (Array.isArray(exceptionResponse.message)) {

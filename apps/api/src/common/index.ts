@@ -5,4 +5,5 @@ export * from './interceptors';
 export * from './logging';
 export * from './middleware';
 export * from './pipes';
+export * from './time';
 export * from './utils/request-id.util';

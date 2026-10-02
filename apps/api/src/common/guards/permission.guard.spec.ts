@@ -5,15 +5,17 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
-import { DefaultDenyGuard } from './default-deny.guard';
+import { IS_AUTHENTICATED_KEY } from '../decorators/authenticated.decorator';
 
-describe('DefaultDenyGuard', () => {
-  let guard: DefaultDenyGuard;
+import { PermissionGuard } from './permission.guard';
+
+describe('PermissionGuard', () => {
+  let guard: PermissionGuard;
   let reflector: Reflector;
 
   beforeEach(() => {
     reflector = new Reflector();
-    guard = new DefaultDenyGuard(reflector);
+    guard = new PermissionGuard(reflector);
   });
 
   const createMockContext = (user?: {
@@ -38,7 +40,25 @@ describe('DefaultDenyGuard', () => {
     expect(guard.canActivate(context)).toBe(true);
   });
 
-  it('fails closed (403) when endpoint lacks both @Public() and @RequirePermission()', () => {
+  it('rejects with 401 when non-public endpoint accessed without user', () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(undefined);
+
+    const context = createMockContext(undefined);
+    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    expect(() => guard.canActivate(context)).toThrow('Authentication required');
+  });
+
+  it('allows access if route is marked @Authenticated() and user is present', () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockImplementation((key) => {
+      if (key === IS_AUTHENTICATED_KEY) return true;
+      return undefined;
+    });
+
+    const context = createMockContext({ permissions: [] });
+    expect(guard.canActivate(context)).toBe(true);
+  });
+
+  it('fails closed (403) when endpoint lacks @Public(), @Authenticated(), and @RequirePermission()', () => {
     jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(undefined);
 
     const context = createMockContext({ permissions: [] });
@@ -48,21 +68,8 @@ describe('DefaultDenyGuard', () => {
     );
   });
 
-  it('rejects with 401 Unauthorized when non-public endpoint accessed without user session', () => {
-    jest.spyOn(reflector, 'getAllAndOverride').mockImplementation((key) => {
-      if (key === 'isPublic') return undefined;
-      if (key === 'permissions') return ['users.read'];
-      return undefined;
-    });
-
-    const context = createMockContext(undefined);
-    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
-    expect(() => guard.canActivate(context)).toThrow('Authentication required');
-  });
-
   it('rejects with 403 Forbidden when user lacks required permission', () => {
     jest.spyOn(reflector, 'getAllAndOverride').mockImplementation((key) => {
-      if (key === 'isPublic') return undefined;
       if (key === 'permissions') return ['users.read'];
       return undefined;
     });
@@ -76,7 +83,6 @@ describe('DefaultDenyGuard', () => {
 
   it('allows access when user possesses all declared permissions', () => {
     jest.spyOn(reflector, 'getAllAndOverride').mockImplementation((key) => {
-      if (key === 'isPublic') return undefined;
       if (key === 'permissions') return ['users.read', 'users.create'];
       return undefined;
     });
