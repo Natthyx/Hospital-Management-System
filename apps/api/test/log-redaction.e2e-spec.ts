@@ -94,6 +94,7 @@ describe('Log Redaction and Data Protection (e2e)', () => {
     // Perform the HTTP request with sensitive data across headers, query, and body
     const res = await request(server)
       .post('/api/v1/test-redaction?q=John%20Smith')
+      .set('Origin', 'http://localhost:5173')
       .set('Cookie', `session=${sensitiveValues.cookie}`)
       .set('Authorization', `Bearer ${sensitiveValues.auth}`)
       .set('X-CSRF-Token', sensitiveValues.csrf)

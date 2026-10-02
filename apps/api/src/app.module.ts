@@ -7,11 +7,14 @@ import { LoggerModule } from 'nestjs-pino';
 import { ZodSerializerInterceptor } from 'nestjs-zod';
 
 import {
-  DefaultDenyGuard,
+  OriginGuard,
+  AuthGuard,
+  PermissionGuard,
   AllExceptionsFilter,
   AppZodValidationPipe,
   RequestIdMiddleware,
   ResponseEnvelopeInterceptor,
+  TimeModule,
   REQUEST_ID_HEADER,
   resolveRequestId,
   serializeRequest,
@@ -20,19 +23,30 @@ import {
 import { ConfigModule, ENV_CONFIG } from './config';
 import type { EnvConfig } from './config';
 import { DatabaseModule } from './database';
+import { AuditModule } from './modules/audit';
+import { AuthModule } from './modules/auth';
 import { HealthModule } from './modules/health';
 
 @Module({
   imports: [
     ConfigModule,
+    TimeModule,
     DatabaseModule,
+    AuditModule,
     HealthModule,
+    AuthModule,
     ThrottlerModule.forRootAsync({
       inject: [ENV_CONFIG],
       useFactory: (env: EnvConfig) => [
         {
+          name: 'default',
           ttl: env.THROTTLE_TTL_MS,
           limit: env.THROTTLE_LIMIT,
+        },
+        {
+          name: 'auth',
+          ttl: env.AUTH_THROTTLE_TTL_MS,
+          limit: env.AUTH_THROTTLE_LIMIT,
         },
       ],
     }),
@@ -113,7 +127,15 @@ import { HealthModule } from './modules/health';
     },
     {
       provide: APP_GUARD,
-      useClass: DefaultDenyGuard,
+      useClass: OriginGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: AuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: PermissionGuard,
     },
     {
       provide: APP_FILTER,

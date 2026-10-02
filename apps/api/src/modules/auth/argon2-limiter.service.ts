@@ -1,10 +1,13 @@
 import {
   Injectable,
+  Inject,
+  Optional,
   OnModuleInit,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import * as argon2 from 'argon2';
 
+import { ENV_CONFIG } from '../../config';
 import { validateEnv, type EnvConfig } from '../../config/env.schema';
 
 interface QueuedTask<T> {
@@ -25,7 +28,11 @@ export class Argon2LimiterService implements OnModuleInit {
   private readonly queue: QueuedTask<unknown>[] = [];
   private dummyHash = '';
 
-  constructor(envOverride?: EnvConfig) {
+  constructor(
+    @Optional()
+    @Inject(ENV_CONFIG)
+    envOverride?: EnvConfig,
+  ) {
     this.config = envOverride ?? validateEnv();
     this.maxConcurrency = this.config.ARGON2_MAX_CONCURRENCY;
     this.maxQueue = this.config.ARGON2_MAX_QUEUE;

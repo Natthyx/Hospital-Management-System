@@ -18,6 +18,17 @@ export function configureSecurityAndSwagger(
   app: INestApplication,
   env: EnvConfig,
 ): void {
+  // Trust proxy configuration for reverse proxies (e.g. nginx)
+  const expressApp = app.getHttpAdapter().getInstance() as {
+    set?: (setting: string, val: unknown) => void;
+  } | null;
+  if (expressApp && typeof expressApp.set === 'function') {
+    expressApp.set(
+      'trust proxy',
+      env.TRUST_PROXY > 0 ? env.TRUST_PROXY : false,
+    );
+  }
+
   // Route-specific CSP via Helmet
   app.use((req: Request, res: Response, next: NextFunction) => {
     const isSwaggerRoute = req.path.startsWith('/api/docs');
