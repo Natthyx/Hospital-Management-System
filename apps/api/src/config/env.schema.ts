@@ -194,6 +194,37 @@ function parseEnvContent(content: string): Record<string, string> {
 }
 
 /**
+ * Locates the monorepo root directory by ascending until pnpm-workspace.yaml is found.
+ * Starts from startDir (defaults to __dirname), falling back to fallbackDir (defaults to process.cwd()).
+ */
+function findWorkspaceRoot(
+  startDir: string = __dirname,
+  fallbackDir: string = process.cwd(),
+): string | null {
+  const tryAscend = (dir: string): string | null => {
+    let current = path.resolve(dir);
+    for (;;) {
+      if (fs.existsSync(path.join(current, 'pnpm-workspace.yaml'))) {
+        return current;
+      }
+      const parent = path.dirname(current);
+      if (parent === current) {
+        return null;
+      }
+      current = parent;
+    }
+  };
+
+  return tryAscend(startDir) ?? tryAscend(fallbackDir);
+}
+
+interface LoadRootEnvOptions {
+  nodeEnv?: string;
+  rootDir?: string;
+  enabled?: boolean;
+}
+
+/**
  * Loads the repository root .env file into the environment if running locally.
  *
  * Rules:
@@ -201,19 +232,22 @@ function parseEnvContent(content: string): Record<string, string> {
  * (b) Loads only the repo-root .env by explicit path.
  * (c) Never overrides variables already set in process.env.
  */
-function loadRootEnv(
-  options: {
-    nodeEnv?: string;
-    rootDir?: string;
-  } = {},
-): boolean {
+function loadRootEnv(options: LoadRootEnvOptions = {}): boolean {
+  if (options.enabled === false) {
+    return false;
+  }
+
   const currentEnv = options.nodeEnv ?? process.env.NODE_ENV;
   if (currentEnv === 'production') {
     return false;
   }
 
-  // Explicit repo root: three levels up from src/config or dist/config
-  const rootDir = options.rootDir ?? path.resolve(__dirname, '../../..');
+  // Find monorepo root by ascending until pnpm-workspace.yaml is found
+  const rootDir = options.rootDir ?? findWorkspaceRoot(__dirname);
+  if (!rootDir) {
+    return false;
+  }
+
   const envPath = path.resolve(rootDir, '.env');
 
   try {
@@ -255,5 +289,5 @@ function validateEnv(
   return result.data;
 }
 
-export { envSchema, validateEnv, loadRootEnv };
-export type { EnvConfig };
+export { envSchema, validateEnv, loadRootEnv, findWorkspaceRoot };
+export type { EnvConfig, LoadRootEnvOptions };

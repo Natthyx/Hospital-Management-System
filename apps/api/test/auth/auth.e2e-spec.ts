@@ -99,6 +99,7 @@ describe('Authentication Module & Security Guards (e2e)', () => {
     await app.init();
 
     server = app.getHttpServer() as Server;
+    server.setMaxListeners(50);
     prisma = new PrismaClient({
       datasources: { db: { url: process.env.DATABASE_URL } },
     });
@@ -404,62 +405,180 @@ describe('Authentication Module & Security Guards (e2e)', () => {
       expect(getErrorBody(res).error.code).toBe(FORBIDDEN);
     });
 
-    it('rejects state-changing method with missing or malformed CSRF token (returns 403, never 500)', async () => {
-      await createTestUser({ username: 'csrftestuser' });
-
+    it('rejects state-changing method with missing CSRF token with 403 (never 500)', async () => {
+      await createTestUser({ username: 'csrfmissing' });
       const loginRes = await request(server)
         .post('/api/v1/auth/login')
         .set('Origin', appOrigin)
-        .send({ username: 'csrftestuser', password: validPassword })
+        .send({ username: 'csrfmissing', password: validPassword })
         .expect(200);
 
       const sessionCookie = getCookie(loginRes);
+      const res = await request(server)
+        .post('/api/v1/auth/logout')
+        .set('Origin', appOrigin)
+        .set('Cookie', sessionCookie);
 
-      // Missing CSRF token
-      await request(server)
+      expect(res.status).toBe(403);
+      expect(res.status).not.toBe(500);
+      expect(getErrorBody(res).error.message).toBe('Invalid CSRF token');
+    });
+
+    it('rejects state-changing method with empty CSRF token with 403 (never 500)', async () => {
+      await createTestUser({ username: 'csrfempty' });
+      const loginRes = await request(server)
+        .post('/api/v1/auth/login')
+        .set('Origin', appOrigin)
+        .send({ username: 'csrfempty', password: validPassword })
+        .expect(200);
+
+      const sessionCookie = getCookie(loginRes);
+      const res = await request(server)
         .post('/api/v1/auth/logout')
         .set('Origin', appOrigin)
         .set('Cookie', sessionCookie)
-        .expect(403);
+        .set('X-CSRF-Token', '');
 
-      // Short CSRF token
-      await request(server)
+      expect(res.status).toBe(403);
+      expect(res.status).not.toBe(500);
+      expect(getErrorBody(res).error.message).toBe('Invalid CSRF token');
+    });
+
+    it('rejects state-changing method with short CSRF token with 403 (never 500)', async () => {
+      await createTestUser({ username: 'csrfshort' });
+      const loginRes = await request(server)
+        .post('/api/v1/auth/login')
+        .set('Origin', appOrigin)
+        .send({ username: 'csrfshort', password: validPassword })
+        .expect(200);
+
+      const sessionCookie = getCookie(loginRes);
+      const res = await request(server)
         .post('/api/v1/auth/logout')
         .set('Origin', appOrigin)
         .set('Cookie', sessionCookie)
-        .set('X-CSRF-Token', 'short')
-        .expect(403);
+        .set('X-CSRF-Token', 'short');
 
-      // Long CSRF token
-      await request(server)
+      expect(res.status).toBe(403);
+      expect(res.status).not.toBe(500);
+      expect(getErrorBody(res).error.message).toBe('Invalid CSRF token');
+    });
+
+    it('rejects state-changing method with long CSRF token with 403 (never 500)', async () => {
+      await createTestUser({ username: 'csrflong' });
+      const loginRes = await request(server)
+        .post('/api/v1/auth/login')
+        .set('Origin', appOrigin)
+        .send({ username: 'csrflong', password: validPassword })
+        .expect(200);
+
+      const sessionCookie = getCookie(loginRes);
+      const res = await request(server)
         .post('/api/v1/auth/logout')
         .set('Origin', appOrigin)
         .set('Cookie', sessionCookie)
-        .set('X-CSRF-Token', 'a'.repeat(256))
-        .expect(403);
+        .set('X-CSRF-Token', 'a'.repeat(256));
 
-      // Empty CSRF token
-      await request(server)
-        .post('/api/v1/auth/logout')
+      expect(res.status).toBe(403);
+      expect(res.status).not.toBe(500);
+      expect(getErrorBody(res).error.message).toBe('Invalid CSRF token');
+    });
+
+    it('rejects state-changing method with non-ASCII CSRF token with 403 (never 500)', async () => {
+      await createTestUser({ username: 'csrfnonascii' });
+      const loginRes = await request(server)
+        .post('/api/v1/auth/login')
         .set('Origin', appOrigin)
-        .set('Cookie', sessionCookie)
-        .set('X-CSRF-Token', '')
-        .expect(403);
+        .send({ username: 'csrfnonascii', password: validPassword })
+        .expect(200);
 
-      // Non-ASCII CSRF token (Latin-1 chars like \u00e9 have byte values > 127, valid in HTTP header)
-      await request(server)
+      const sessionCookie = getCookie(loginRes);
+      const res = await request(server)
         .post('/api/v1/auth/logout')
         .set('Origin', appOrigin)
         .set('Cookie', sessionCookie)
         .set(
           'X-CSRF-Token',
           't\u00e9st_c\u00f1rf_t\u00f6ken_non_ascii_12345678901234',
-        )
-        .expect(403);
+        );
+
+      expect(res.status).toBe(403);
+      expect(res.status).not.toBe(500);
+      expect(getErrorBody(res).error.message).toBe('Invalid CSRF token');
     });
   });
 
   describe('Account Lockout & Concurrency', () => {
+    it('LOGIN_MAX_FAILURES raised above 10: 10 concurrent failures end at exactly 10', async () => {
+      const { user } = await createTestUser({ username: 'concurrent10' });
+      const originalMaxFailures = envConfig.LOGIN_MAX_FAILURES;
+      envConfig.LOGIN_MAX_FAILURES = 15;
+
+      try {
+        const attempts = Array.from({ length: 10 }, () =>
+          request(server)
+            .post('/api/v1/auth/login')
+            .set('Origin', appOrigin)
+            .send({ username: 'concurrent10', password: 'WrongPassword!' }),
+        );
+
+        const results = await Promise.all(attempts);
+        for (const res of results) {
+          expect(res.status).toBe(401);
+        }
+
+        const dbUser = await prisma.user.findUniqueOrThrow({
+          where: { id: user.id },
+        });
+        expect(dbUser.failedLoginCount).toBe(10);
+        expect(dbUser.lockedUntil).toBeNull();
+      } finally {
+        envConfig.LOGIN_MAX_FAILURES = originalMaxFailures;
+      }
+    });
+
+    it('default 5: 10 concurrent failures end at exactly 5 with locked_until set once and not extended', async () => {
+      const { user } = await createTestUser({ username: 'concurrent5' });
+      expect(envConfig.LOGIN_MAX_FAILURES).toBe(5);
+
+      const attempts = Array.from({ length: 10 }, () =>
+        request(server)
+          .post('/api/v1/auth/login')
+          .set('Origin', appOrigin)
+          .send({ username: 'concurrent5', password: 'WrongPassword!' }),
+      );
+
+      const results = await Promise.all(attempts);
+      for (const res of results) {
+        expect(res.status).toBe(401);
+      }
+
+      const dbUser = await prisma.user.findUniqueOrThrow({
+        where: { id: user.id },
+      });
+      expect(dbUser.failedLoginCount).toBe(5);
+      expect(dbUser.lockedUntil).not.toBeNull();
+      const initialLockedUntil = dbUser.lockedUntil;
+      if (!initialLockedUntil) {
+        throw new Error('Expected lockedUntil to be set');
+      }
+
+      // 11th failed attempt while locked must not extend locked_until or increment count
+      await request(server)
+        .post('/api/v1/auth/login')
+        .set('Origin', appOrigin)
+        .send({ username: 'concurrent5', password: 'WrongPassword!' })
+        .expect(401);
+
+      const dbUserAfter = await prisma.user.findUniqueOrThrow({
+        where: { id: user.id },
+      });
+      expect(dbUserAfter.failedLoginCount).toBe(5);
+      expect(dbUserAfter.lockedUntil?.getTime()).toBe(
+        initialLockedUntil.getTime(),
+      );
+    });
+
     it('locks account after 5 consecutive failures, does not extend lock on subsequent failures, and rejects correct password while locked', async () => {
       const { user } = await createTestUser({ username: 'lockme' });
 
@@ -972,6 +1091,143 @@ describe('Authentication Module & Security Guards (e2e)', () => {
       expect(getErrorBody(res).error.message).toBe(
         'Ambiguous session credentials',
       );
+    });
+  });
+
+  describe('Proxy Trust & Header Truncation', () => {
+    it('TRUST_PROXY=0 ignores X-Forwarded-For and TRUST_PROXY=1 uses it (through shared bootstrap helper)', async () => {
+      const { user: user0 } = await createTestUser({ username: 'trustproxy0' });
+      const { user: user1 } = await createTestUser({ username: 'trustproxy1' });
+
+      // When TRUST_PROXY=0 (disabled)
+      configureSecurityAndSwagger(app, { ...envConfig, TRUST_PROXY: 0 });
+      await request(server)
+        .post('/api/v1/auth/login')
+        .set('Origin', appOrigin)
+        .set('X-Forwarded-For', '203.0.113.195')
+        .send({ username: 'trustproxy0', password: validPassword })
+        .expect(200);
+
+      const dbSession0 = await prisma.session.findFirstOrThrow({
+        where: { userId: user0.id },
+      });
+      // Should ignore X-Forwarded-For (ip will be local socket address, not 203.0.113.195)
+      expect(dbSession0.ip).not.toBe('203.0.113.195');
+
+      // When TRUST_PROXY=1 (enabled for 1 hop)
+      configureSecurityAndSwagger(app, { ...envConfig, TRUST_PROXY: 1 });
+      await request(server)
+        .post('/api/v1/auth/login')
+        .set('Origin', appOrigin)
+        .set('X-Forwarded-For', '203.0.113.195')
+        .send({ username: 'trustproxy1', password: validPassword })
+        .expect(200);
+
+      const dbSession1 = await prisma.session.findFirstOrThrow({
+        where: { userId: user1.id },
+      });
+      // Should trust and use X-Forwarded-For
+      expect(dbSession1.ip).toBe('203.0.113.195');
+
+      // Reset back to original envConfig
+      configureSecurityAndSwagger(app, envConfig);
+    });
+
+    it('truncates ip to 45 chars and user_agent to 255 chars without DB overflow', async () => {
+      const { user } = await createTestUser({ username: 'truncatetest' });
+      configureSecurityAndSwagger(app, { ...envConfig, TRUST_PROXY: 1 });
+
+      const longIp =
+        '2001:0db8:85a3:0000:0000:8a2e:0370:7334:extra_long_ipv6_padding_data_exceeding_45_characters';
+      const longUserAgent = 'HMS-Test-Client/'.concat('A'.repeat(300));
+
+      await request(server)
+        .post('/api/v1/auth/login')
+        .set('Origin', appOrigin)
+        .set('X-Forwarded-For', longIp)
+        .set('User-Agent', longUserAgent)
+        .send({ username: 'truncatetest', password: validPassword })
+        .expect(200);
+
+      const session = await prisma.session.findFirstOrThrow({
+        where: { userId: user.id },
+      });
+
+      expect(session.ip).not.toBeNull();
+      expect(session.ip?.length).toBe(45);
+      expect(session.ip).toBe(longIp.slice(0, 45));
+
+      expect(session.userAgent).not.toBeNull();
+      expect(session.userAgent?.length).toBe(255);
+      expect(session.userAgent).toBe(longUserAgent.slice(0, 255));
+
+      // Audit event should also have truncated values
+      const events = auditRecorder.getEvents();
+      const loginEvent = events.find(
+        (e) => e.action === 'auth.login_success' && e.actorUserId === user.id,
+      );
+      expect(loginEvent).toBeDefined();
+      expect(loginEvent?.ip?.length).toBe(45);
+      expect(loginEvent?.userAgent?.length).toBe(255);
+
+      configureSecurityAndSwagger(app, envConfig);
+    });
+  });
+
+  describe('Cache-Control on /auth responses', () => {
+    it('sets Cache-Control: no-store and Pragma: no-cache on all /auth responses', async () => {
+      await createTestUser({ username: 'nocacheuser' });
+
+      // 1. POST /api/v1/auth/login
+      const loginRes = await request(server)
+        .post('/api/v1/auth/login')
+        .set('Origin', appOrigin)
+        .send({ username: 'nocacheuser', password: validPassword })
+        .expect(200);
+
+      expect(loginRes.headers['cache-control']).toBe(
+        'no-store, no-cache, must-revalidate, proxy-revalidate',
+      );
+      expect(loginRes.headers.pragma).toBe('no-cache');
+
+      const sessionCookie = getCookie(loginRes);
+      const loginBody = getBody<LoginResponse['data']>(loginRes);
+      const csrfToken = loginBody.data.csrfToken;
+
+      // 2. GET /api/v1/auth/me
+      const meRes = await request(server)
+        .get('/api/v1/auth/me')
+        .set('Cookie', sessionCookie)
+        .expect(200);
+
+      expect(meRes.headers['cache-control']).toBe(
+        'no-store, no-cache, must-revalidate, proxy-revalidate',
+      );
+      expect(meRes.headers.pragma).toBe('no-cache');
+
+      // 3. GET /api/v1/auth/sessions
+      const sessionsRes = await request(server)
+        .get('/api/v1/auth/sessions')
+        .set('Cookie', sessionCookie)
+        .expect(200);
+
+      expect(sessionsRes.headers['cache-control']).toBe(
+        'no-store, no-cache, must-revalidate, proxy-revalidate',
+      );
+      expect(sessionsRes.headers.pragma).toBe('no-cache');
+
+      // 4. POST /api/v1/auth/logout
+      const logoutRes = await request(server)
+        .post('/api/v1/auth/logout')
+        .set('Origin', appOrigin)
+        .set('Cookie', sessionCookie)
+        .set('X-CSRF-Token', csrfToken)
+        .expect(200);
+
+      expect(logoutRes.headers['cache-control']).toBe(
+        'no-store, no-cache, must-revalidate, proxy-revalidate',
+      );
+      expect(logoutRes.headers.pragma).toBe('no-cache');
     });
   });
 });
