@@ -69,3 +69,36 @@ export {
   validatePasswordPolicy,
 } from './identity/password-rules';
 export type { PasswordValidationResult } from './identity/password-rules';
+export {
+  AUDIT_ACTIONS,
+  AUDIT_OUTCOMES,
+  AUDIT_CATEGORIES,
+  AUDIT_ACTION_PATTERN,
+  AUDIT_ACTION_REGEX,
+  RESERVED_ACTOR_USERNAMES,
+  isReservedActorUsername,
+} from './audit';
+export type {
+  AuditAction,
+  AuditOutcome,
+  AuditCategory,
+  ReservedActorUsername,
+} from './audit';
+export {
+  auditDetailParamsSchema,
+  auditListQuerySchema,
+  auditLogItemSchema,
+  auditLogDetailSchema,
+  auditListResponseDataSchema,
+  auditListResponseSchema,
+  auditDetailResponseSchema,
+} from './schemas/audit.schema';
+export type {
+  AuditDetailParams,
+  AuditListQuery,
+  AuditLogItem,
+  AuditLogDetail,
+  AuditListResponseData,
+  AuditListResponse,
+  AuditDetailResponse,
+} from './schemas/audit.schema';

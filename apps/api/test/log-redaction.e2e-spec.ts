@@ -58,7 +58,7 @@ describe('Log Redaction and Data Protection (e2e)', () => {
 
   afterAll(async () => {
     delete process.env.TEST_LOGS_ENABLED;
-    delete process.env.LOG_LEVEL;
+    process.env.LOG_LEVEL = 'silent';
     process.stdout.write = originalStdoutWrite;
     await app.close();
   });

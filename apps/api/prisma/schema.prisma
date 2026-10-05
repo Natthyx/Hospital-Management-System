@@ -52,6 +52,7 @@ model User {
 
   grantedPermissions   RolePermission[] @relation("RolePermissionGrantedBy")
   sessions             Session[]
+  auditLogs            AuditLog[]       @relation("AuditLogActor")
 
   @@map("users")
 }
@@ -134,4 +135,41 @@ model Session {
   @@index([userId])
   @@index([expiresAt])
   @@map("sessions")
+}
+
+enum AuditOutcome {
+  success
+  denied
+  failure
+
+  @@map("audit_outcome")
+}
+
+model AuditLog {
+  id             BigInt        @id @default(autoincrement())
+  occurredAt     DateTime      @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  actorUserId    String?       @map("actor_user_id") @db.Uuid
+  actorUsername  String        @map("actor_username")
+  action         String
+  outcome        AuditOutcome
+  entityType     String?       @map("entity_type")
+  entityId       String?       @map("entity_id")
+  patientId      String?       @map("patient_id") @db.Uuid
+  before         Json?
+  after          Json?
+  metadata       Json          @default("{}")
+  ip             String?
+  userAgent      String?       @map("user_agent")
+  sessionId      String?       @map("session_id") @db.Uuid
+  requestId      String?       @map("request_id")
+
+  actorUser      User?         @relation("AuditLogActor", fields: [actorUserId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "audit_log_actor_user_id_fkey")
+
+  @@index([occurredAt(sort: Desc), id(sort: Desc)], map: "audit_log_occurred_at_id_idx")
+  @@index([patientId, occurredAt(sort: Desc)], map: "audit_log_patient_id_occurred_at_idx")
+  @@index([actorUserId, occurredAt(sort: Desc)], map: "audit_log_actor_user_id_occurred_at_idx")
+  @@index([entityType, entityId], map: "audit_log_entity_idx")
+  @@index([action, occurredAt(sort: Desc)], map: "audit_log_action_occurred_at_idx")
+  @@index([requestId], map: "audit_log_request_id_idx")
+  @@map("audit_log")
 }

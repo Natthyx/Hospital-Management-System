@@ -21,6 +21,10 @@ import type { Response, Request } from 'express';
 import { ZodValidationException } from 'nestjs-zod';
 import { ZodError } from 'zod';
 
+import {
+  AuditWriteError,
+  extractSqlState,
+} from '../../modules/audit/audit-errors';
 import { REQUEST_ID_HEADER, resolveRequestId } from '../utils/request-id.util';
 
 interface ErrorResponseEnvelope {
@@ -131,17 +135,49 @@ export class AllExceptionsFilter implements ExceptionFilter {
       // Unhandled / system exception (e.g. database error, syntax error, null ref)
       status = 500;
       code = INTERNAL_ERROR;
-      message = isProduction
-        ? 'An unexpected error occurred'
-        : exception instanceof Error
-          ? exception.message
-          : 'Internal server error';
 
-      if (process.env.NODE_ENV !== 'test') {
+      const isDbOrAudit =
+        exception instanceof AuditWriteError ||
+        (exception instanceof Error &&
+          (exception.constructor.name.startsWith('PrismaClient') ||
+            exception.name === 'AuditWriteError'));
+
+      if (isDbOrAudit) {
+        const errorClass =
+          exception instanceof AuditWriteError
+            ? exception.errorClass
+            : exception instanceof Error
+              ? exception.constructor.name
+              : 'DatabaseError';
+        const sqlState =
+          exception instanceof AuditWriteError
+            ? exception.sqlState
+            : extractSqlState(exception);
+
+        const sanitizedSummary = sqlState
+          ? `${errorClass} (SQLSTATE ${sqlState})`
+          : errorClass;
+
+        message = isProduction
+          ? 'An unexpected error occurred'
+          : `[${errorClass}] Database operation failed${sqlState ? ` (SQLSTATE ${sqlState})` : ''}`;
+
         this.logger.error(
-          `Unhandled exception on ${request.method} ${request.url} [req: ${requestId}]`,
-          exception instanceof Error ? exception.stack : String(exception),
+          `Unhandled database/audit exception on ${request.method} ${request.url} [req: ${requestId}]: ${sanitizedSummary}`,
         );
+      } else {
+        message = isProduction
+          ? 'An unexpected error occurred'
+          : exception instanceof Error
+            ? exception.message
+            : 'Internal server error';
+
+        if (process.env.NODE_ENV !== 'test') {
+          this.logger.error(
+            `Unhandled exception on ${request.method} ${request.url} [req: ${requestId}]`,
+            exception instanceof Error ? exception.stack : String(exception),
+          );
+        }
       }
     }
 

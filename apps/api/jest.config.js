@@ -61,6 +61,22 @@ if (parsedMigrationUrl.pathname !== '/hms_test') {
 process.env.DATABASE_URL = testDbUrl;
 process.env.DATABASE_MIGRATION_URL = testMigrationUrl;
 
+// Force test environment unconditionally regardless of parent shell or .env
+process.env.NODE_ENV = 'test';
+
+// Reset/override dev-only or shell-leaked variables to deterministic test defaults
+process.env.LOG_LEVEL = 'silent';
+process.env.SWAGGER_ENABLED = 'false';
+process.env.COOKIE_SECURE = 'false';
+process.env.TRUST_PROXY = '0';
+process.env.THROTTLE_TTL_MS = '60000';
+process.env.THROTTLE_LIMIT = '1000';
+process.env.AUTH_THROTTLE_LIMIT = '1000';
+process.env.AUTH_THROTTLE_TTL_MS = '60000';
+process.env.ARGON2_MEMORY = '1024';
+process.env.ARGON2_ITERATIONS = '1';
+process.env.ARGON2_PARALLELISM = '1';
+
 // DB suites stay --runInBand because the test cleaner uses TRUNCATE ... CASCADE across shared tables
 module.exports = {
   globalSetup: '<rootDir>/test/setup/global-setup.js',

@@ -25,4 +25,37 @@ describe('Test Cleaner Safety Refusal', () => {
     expect(result).toBeDefined();
     expect(result?.createdAdmin).toBe(true);
   });
+
+  it('guarantees audit_log immutability triggers remain strictly enabled after cleaning', async () => {
+    await cleanTestDatabase();
+
+    const ownerUrl = process.env.DATABASE_MIGRATION_URL;
+    if (!ownerUrl) {
+      throw new Error('DATABASE_MIGRATION_URL is required');
+    }
+    const { PrismaClient } = await import('@prisma/client');
+    const ownerPrisma = new PrismaClient({
+      datasources: { db: { url: ownerUrl } },
+    });
+
+    try {
+      const triggers = await ownerPrisma.$queryRaw<
+        { tgname: string; tgenabled: string }[]
+      >`
+        SELECT tgname, tgenabled
+        FROM pg_trigger
+        WHERE tgrelid = 'public.audit_log'::regclass
+          AND tgname IN ('audit_log_reject_update_delete', 'audit_log_reject_truncate')
+        ORDER BY tgname ASC;
+      `;
+
+      expect(triggers.length).toBe(2);
+      // In PostgreSQL, 'O' denotes "origin and local" (enabled)
+      for (const trg of triggers) {
+        expect(trg.tgenabled).toBe('O');
+      }
+    } finally {
+      await ownerPrisma.$disconnect();
+    }
+  });
 });
