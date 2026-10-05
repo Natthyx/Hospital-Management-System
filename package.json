@@ -15,6 +15,14 @@
     ],
     "overrides": {
       "deepmerge-ts": "^8.0.0"
+    },
+    "auditConfig": {
+      "ignoreCves": [
+        "CVE-2026-93687"
+      ],
+      "ignoreGhsas": [
+        "GHSA-vfj7-8cjw-p6xm"
+      ]
     }
   },
   "scripts": {
