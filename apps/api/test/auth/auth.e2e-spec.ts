@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import type { Server } from 'node:http';
 
 import {
@@ -21,7 +22,6 @@ import { AppModule } from '../../src/app.module';
 import { configureSecurityAndSwagger } from '../../src/bootstrap-utils';
 import { CLOCK, TestClock } from '../../src/common';
 import { ENV_CONFIG, type EnvConfig } from '../../src/config';
-import { InMemoryAuditRecorder } from '../../src/modules/audit';
 import { Argon2LimiterService } from '../../src/modules/auth/argon2-limiter.service';
 import { cleanTestDatabase } from '../utils/test-cleaner';
 
@@ -52,7 +52,6 @@ describe('Authentication Module & Security Guards (e2e)', () => {
   let prisma: PrismaClient;
   let testClock: TestClock;
   let argon2Limiter: Argon2LimiterService;
-  let auditRecorder: InMemoryAuditRecorder;
   let envConfig: EnvConfig;
 
   const validPassword = 'SecurePassword123!';
@@ -104,7 +103,6 @@ describe('Authentication Module & Security Guards (e2e)', () => {
       datasources: { db: { url: process.env.DATABASE_URL } },
     });
     argon2Limiter = app.get<Argon2LimiterService>(Argon2LimiterService);
-    auditRecorder = app.get<InMemoryAuditRecorder>(InMemoryAuditRecorder);
   });
 
   afterAll(async () => {
@@ -114,7 +112,6 @@ describe('Authentication Module & Security Guards (e2e)', () => {
 
   beforeEach(async () => {
     testClock.setTime(new Date('2026-10-02T12:00:00.000Z'));
-    auditRecorder.clear();
     await cleanTestDatabase({ reSeed: true });
   });
 
@@ -192,9 +189,10 @@ describe('Authentication Module & Security Guards (e2e)', () => {
       expect(cookieHeader).not.toMatch(/Expires/i);
 
       // Verify audit event
-      const events = auditRecorder.getEvents();
-      const loginEvent = events.find((e) => e.action === 'auth.login_success');
-      expect(loginEvent).toBeDefined();
+      const loginEvent = await prisma.auditLog.findFirst({
+        where: { action: 'auth.login_success', actorUsername: 'testdoc' },
+      });
+      expect(loginEvent).not.toBeNull();
       expect(loginEvent?.outcome).toBe('success');
       expect(loginEvent?.actorUsername).toBe('testdoc');
     });
@@ -220,9 +218,10 @@ describe('Authentication Module & Security Guards (e2e)', () => {
       expect(headers['set-cookie']).toBeUndefined();
 
       // Audit event
-      const events = auditRecorder.getEvents();
-      const failedEvent = events.find((e) => e.action === 'auth.login_failed');
-      expect(failedEvent).toBeDefined();
+      const failedEvent = await prisma.auditLog.findFirst({
+        where: { action: 'auth.login_failed', actorUsername: 'testuser' },
+      });
+      expect(failedEvent).not.toBeNull();
       expect(failedEvent?.outcome).toBe('failure');
       expect(failedEvent?.actorUsername).toBe('testuser');
     });
@@ -246,10 +245,11 @@ describe('Authentication Module & Security Guards (e2e)', () => {
       expect(headers['set-cookie']).toBeUndefined();
 
       // Condition 8: Never record attempted username if unknown
-      const events = auditRecorder.getEvents();
-      const failedEvent = events.find((e) => e.action === 'auth.login_failed');
-      expect(failedEvent).toBeDefined();
-      expect(failedEvent?.actorUsername).toBe('unknown');
+      const failedEvent = await prisma.auditLog.findFirst({
+        where: { action: 'auth.login_failed', actorUsername: 'system:unknown' },
+      });
+      expect(failedEvent).not.toBeNull();
+      expect(failedEvent?.actorUsername).toBe('system:unknown');
     });
 
     it('rejects disabled/inactive user with identical generic 401', async () => {
@@ -1162,11 +1162,10 @@ describe('Authentication Module & Security Guards (e2e)', () => {
       expect(session.userAgent).toBe(longUserAgent.slice(0, 255));
 
       // Audit event should also have truncated values
-      const events = auditRecorder.getEvents();
-      const loginEvent = events.find(
-        (e) => e.action === 'auth.login_success' && e.actorUserId === user.id,
-      );
-      expect(loginEvent).toBeDefined();
+      const loginEvent = await prisma.auditLog.findFirst({
+        where: { action: 'auth.login_success', actorUserId: user.id },
+      });
+      expect(loginEvent).not.toBeNull();
       expect(loginEvent?.ip?.length).toBe(45);
       expect(loginEvent?.userAgent?.length).toBe(255);
 
@@ -1228,6 +1227,115 @@ describe('Authentication Module & Security Guards (e2e)', () => {
         'no-store, no-cache, must-revalidate, proxy-revalidate',
       );
       expect(logoutRes.headers.pragma).toBe('no-cache');
+    });
+  });
+
+  describe('Audit Actor Attribution & system:unknown Invariants (Point 5)', () => {
+    it('guarantees every audit row written during authenticated requests attributes to the real user, and system:unknown occurs strictly on unknown-user login failures', async () => {
+      // 1. Run unknown-user login failure
+      await request(server)
+        .post('/api/v1/auth/login')
+        .set('Origin', appOrigin)
+        .send({ username: 'nonexistentuser', password: validPassword })
+        .expect(401);
+
+      // 2. Run known-user login failure (bad password)
+      const { user } = await createTestUser({
+        username: 'attributionuser',
+        roleCode: 'doctor',
+      });
+      await request(server)
+        .post('/api/v1/auth/login')
+        .set('Origin', appOrigin)
+        .send({ username: user.username, password: 'WrongPassword123!' })
+        .expect(401);
+
+      // 3. Run authenticated login
+      const loginRes = await request(server)
+        .post('/api/v1/auth/login')
+        .set('Origin', appOrigin)
+        .send({ username: user.username, password: validPassword })
+        .expect(200);
+
+      const cookie = getCookie(loginRes);
+      const csrfToken = getBody<LoginResponse['data']>(loginRes).data.csrfToken;
+
+      // 4. Run authenticated password change
+      const newPassword = 'BrandNewPassword123!';
+      const changeRes = await request(server)
+        .post('/api/v1/auth/change-password')
+        .set('Origin', appOrigin)
+        .set('Cookie', cookie)
+        .set('X-CSRF-Token', csrfToken)
+        .send({ currentPassword: validPassword, newPassword })
+        .expect(200);
+
+      const newCookie = getCookie(changeRes);
+      const newCsrfToken = (changeRes.body as { data: { csrfToken: string } })
+        .data.csrfToken;
+
+      // 5. Create a second session and revoke it using active session
+      const rawToken = crypto.randomBytes(32).toString('base64url');
+      const tokenHash = crypto
+        .createHash('sha256')
+        .update(rawToken)
+        .digest('hex');
+      const dummySession = await prisma.session.create({
+        data: {
+          userId: user.id,
+          tokenHash,
+          csrfToken: crypto.randomBytes(32).toString('base64url'),
+          expiresAt: new Date(Date.now() + 3600000),
+        },
+      });
+
+      await request(server)
+        .delete(`/api/v1/auth/sessions/${dummySession.id}`)
+        .set('Origin', appOrigin)
+        .set('Cookie', newCookie)
+        .set('X-CSRF-Token', newCsrfToken)
+        .expect(200);
+
+      // 6. Run logout
+      await request(server)
+        .post('/api/v1/auth/logout')
+        .set('Origin', appOrigin)
+        .set('Cookie', newCookie)
+        .set('X-CSRF-Token', newCsrfToken)
+        .expect(200);
+
+      // Verify all audit rows in database
+      const allRows = await prisma.auditLog.findMany({
+        orderBy: { id: 'asc' },
+      });
+
+      const unknownActorRows = allRows.filter(
+        (r) => r.actorUsername === 'system:unknown',
+      );
+      const knownUserRows = allRows.filter(
+        (r) => r.actorUsername === user.username,
+      );
+
+      // 1. system:unknown rows exist ONLY for unknown-user login failures
+      expect(unknownActorRows.length).toBeGreaterThan(0);
+      for (const row of unknownActorRows) {
+        expect(row.action).toBe('auth.login_failed');
+        expect(row.actorUserId).toBeNull();
+      }
+
+      // 2. Every authenticated row attributed to the real user
+      expect(knownUserRows.length).toBeGreaterThanOrEqual(4);
+      for (const row of knownUserRows) {
+        expect(row.actorUsername).toBe(user.username);
+        expect(row.actorUserId).toBe(user.id);
+        expect(row.actorUsername).not.toBe('system:unknown');
+      }
+
+      // 3. No audit row in the entire test run had an undefined or empty actorUsername
+      for (const row of allRows) {
+        expect(row.actorUsername).toBeDefined();
+        expect(row.actorUsername.length).toBeGreaterThan(0);
+      }
     });
   });
 });

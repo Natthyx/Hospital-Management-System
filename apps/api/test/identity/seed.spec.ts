@@ -74,6 +74,7 @@ describe('Required Seed (seedRequired)', () => {
     });
 
     it('is strictly idempotent on a second run without altering state', async () => {
+      const auditCountBefore = await prisma.auditLog.count();
       const secondResult = await seedRequired(prisma);
 
       expect(secondResult.createdAdmin).toBe(false);
@@ -84,6 +85,9 @@ describe('Required Seed (seedRequired)', () => {
         where: { username: 'admin' },
       });
       expect(admin).toBeDefined();
+
+      const auditCountAfter = await prisma.auditLog.count();
+      expect(auditCountAfter).toBe(auditCountBefore);
     });
 
     it('never removes existing permissions from admin role', async () => {

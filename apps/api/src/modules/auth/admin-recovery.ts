@@ -191,13 +191,14 @@ export async function executeAdminPasswordReset(
     // 6. Record audit event
     if (options.auditRecorder) {
       await options.auditRecorder.record({
-        action: 'auth.admin_recovery_reset',
+        action: 'user.password_reset',
         actorUserId: null,
-        actorUsername: 'system:cli_recovery',
+        actorUsername: 'cli:recovery',
         entityType: 'user',
         entityId: user.id,
         outcome: 'success',
         metadata: {
+          method: 'cli_recovery',
           username: user.username,
         },
       });

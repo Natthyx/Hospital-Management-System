@@ -15,6 +15,7 @@ import type { Request } from 'express';
 
 import { ENV_CONFIG, type EnvConfig } from '../../config';
 import { PrismaService } from '../../database/prisma.service';
+import { RequestContextService } from '../context/request-context.service';
 import { ALLOW_PASSWORD_CHANGE_KEY } from '../decorators/allow-password-change.decorator';
 import type { RequestUser } from '../decorators/current-user.decorator';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
@@ -41,6 +42,7 @@ export class AuthGuard implements CanActivate {
     private readonly clock: Clock,
     @Inject(ENV_CONFIG)
     private readonly envConfig: EnvConfig,
+    private readonly requestContextService: RequestContextService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -188,6 +190,13 @@ export class AuthGuard implements CanActivate {
       permissions: Array.from(permissionsSet),
       sessionId: session.id,
     };
+
+    // Update AsyncLocalStorage context with authenticated actor information (Correction F)
+    this.requestContextService.setAuth({
+      actorUserId: session.user.id,
+      actorUsername: session.user.username,
+      sessionId: session.id,
+    });
 
     return true;
   }

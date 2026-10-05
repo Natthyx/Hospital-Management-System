@@ -306,6 +306,17 @@ The OWNER approved Python-2.0 (production) and CC-BY-4.0 (dev tooling only) on 2
    **Reason:** Robust defense-in-depth against CSRF and cross-origin hijacking before authentication layers run.
    **Consequences:** Prevents cross-origin state tampering.
 
+## ADR-031 — Request Context Correlation, Audit Redaction, and Transactional Atomicity
+
+**Status:** Accepted
+**Date:** 2026-10-05
+**Decision:**
+
+1. **Request Context via AsyncLocalStorage:** `RequestContextService` manages request-scoped telemetry initialized by `RequestContextMiddleware` across all incoming HTTP requests. Captures `requestId`, client IP (truncated to 45 chars), User-Agent (truncated to 255 chars), and populates `actorUserId`, `actorUsername`, and `sessionId` upon authentication in `AuthGuard`. Explicit event parameters passed to `AuditService.record()` take precedence over ambient store.
+2. **Audit Redaction & Sanitization Engine:** All audit payloads pass through `audit-redaction.ts` before database persistence. Redacts sensitive keys matching `/password|token|secret|hash|csrf|cookie|authorization|mfa/i` to `[REDACTED]`. Redacts secret string values ($argon2 hashes to `[REDACTED_HASH]`, 43-char base64url tokens to `[REDACTED_TOKEN]`). Guards against circular references (`[Circular]`), recursion depth capped at 8 (`[MaxDepth]`), arrays and keys capped at 100 items. Enforces service-level size caps (metadata 8 KiB, before/after states 32 KiB). Fail-safe design guarantees serialization never throws.
+3. **Transactional Atomicity:** `AuditService.record(event, tx?)` accepts the caller's transaction client. Writes to clinical or security records must execute inside the same transaction as their audit entry. If the audit insert fails, `AuditWriteError` is thrown, causing PostgreSQL to abort and roll back all business mutations.
+4. **Error Sanitization:** `AuditWriteError` strips failing row payloads and raw queries. Log entries and HTTP error envelopes expose only the error class and SQLSTATE code (or Prisma error code), preventing leakage of PHI or credential fragments in logs or error responses.
+
 ---
 
 ## Template for new entries

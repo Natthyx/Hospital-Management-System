@@ -23,16 +23,19 @@ export function extractSqlState(cause: unknown): string | undefined {
     return meta.code;
   }
 
-  // Top-level 5-character SQLSTATE code
-  if (typeof record.code === 'string' && /^\d{5}$/.test(record.code)) {
+  // Top-level 5-character SQLSTATE code or Prisma error code (e.g. P2003, 23502)
+  if (
+    typeof record.code === 'string' &&
+    (/^\d{5}$/.test(record.code) || /^P\d{4}$/.test(record.code))
+  ) {
     return record.code;
   }
 
   // Parse SQLSTATE from message string if embedded (e.g. "Code: `23502`" or "code: \"23514\"")
   if (typeof record.message === 'string') {
     const match =
-      /\bCode:\s*`?([0-9]{5})`?\b/.exec(record.message) ??
-      /code:\s*"([0-9]{5})"/i.exec(record.message);
+      /\bCode:\s*`?([0-9]{5}|P[0-9]{4})`?\b/.exec(record.message) ??
+      /code:\s*"([0-9]{5}|P[0-9]{4})"/i.exec(record.message);
     if (match?.[1]) {
       return match[1];
     }

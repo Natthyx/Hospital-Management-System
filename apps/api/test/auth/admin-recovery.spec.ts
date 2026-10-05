@@ -4,12 +4,12 @@ import { validatePasswordPolicy } from '@hms/shared';
 import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
 
-import { InMemoryAuditRecorder } from '../../src/modules/audit/in-memory-audit-recorder';
 import {
   executeAdminPasswordReset,
   generateCompliantTemporaryPassword,
 } from '../../src/modules/auth/admin-recovery';
 import { COMMON_PASSWORDS_SET } from '../../src/modules/auth/data/password-blocklist.data';
+import { InMemoryAuditRecorder } from '../utils/in-memory-audit-recorder';
 import { cleanTestDatabase } from '../utils/test-cleaner';
 
 describe('Admin Password Recovery CLI (admin-recovery.ts)', () => {
@@ -187,12 +187,14 @@ describe('Admin Password Recovery CLI (admin-recovery.ts)', () => {
       // 5. Verify audit event
       const events = auditRecorder.getEvents();
       const recoveryEvent = events.find(
-        (e) => e.action === 'auth.admin_recovery_reset',
+        (e) => e.action === 'user.password_reset',
       );
       expect(recoveryEvent).toBeDefined();
       expect(recoveryEvent?.outcome).toBe('success');
-      expect(recoveryEvent?.actorUsername).toBe('system:cli_recovery');
+      expect(recoveryEvent?.actorUsername).toBe('cli:recovery');
       expect(recoveryEvent?.entityId).toBe(initialUser.id);
+      expect(recoveryEvent?.metadata?.method).toBe('cli_recovery');
+      expect(recoveryEvent?.metadata?.username).toBe('admin');
     });
 
     it('successfully resets password in interactive TTY mode when confirmation matches', async () => {

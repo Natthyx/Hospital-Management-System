@@ -133,7 +133,7 @@ export class AuthService {
         action: 'auth.login_failed',
         outcome: 'failure',
         actorUserId: null,
-        actorUsername: 'unknown', // Condition 8: never record attempted username
+        actorUsername: 'system:unknown', // Condition 8: never record attempted username
         metadata: {
           reason: user ? 'account_disabled' : 'invalid_credentials',
         },

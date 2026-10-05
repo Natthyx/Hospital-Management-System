@@ -1,17 +1,20 @@
 import { Module, Global } from '@nestjs/common';
 
+import { RequestContextService } from '../../common/context/request-context.service';
+
 import { AUDIT_RECORDER } from './audit-recorder.interface';
-import { InMemoryAuditRecorder } from './in-memory-audit-recorder';
+import { AuditService } from './audit.service';
 
 @Global()
 @Module({
   providers: [
-    InMemoryAuditRecorder,
+    RequestContextService,
+    AuditService,
     {
       provide: AUDIT_RECORDER,
-      useExisting: InMemoryAuditRecorder,
+      useExisting: AuditService,
     },
   ],
-  exports: [AUDIT_RECORDER, InMemoryAuditRecorder],
+  exports: [RequestContextService, AuditService, AUDIT_RECORDER],
 })
 export class AuditModule {}

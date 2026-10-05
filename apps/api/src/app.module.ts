@@ -14,6 +14,7 @@ import {
   AllExceptionsFilter,
   AppZodValidationPipe,
   RequestIdMiddleware,
+  RequestContextMiddleware,
   ResponseEnvelopeInterceptor,
   TimeModule,
   REQUEST_ID_HEADER,
@@ -159,6 +160,8 @@ import { HealthModule } from './modules/health';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(RequestIdMiddleware).forRoutes('*');
+    consumer
+      .apply(RequestIdMiddleware, RequestContextMiddleware)
+      .forRoutes('*');
   }
 }

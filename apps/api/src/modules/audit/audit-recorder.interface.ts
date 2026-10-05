@@ -1,12 +1,15 @@
-import type { Prisma } from '@prisma/client';
+import type { Prisma, AuditLog } from '@prisma/client';
 
 export interface AuditEvent {
   action: string;
   outcome: 'success' | 'denied' | 'failure';
   actorUserId?: string | null;
   actorUsername?: string | null;
+  patientId?: string | null;
   entityType?: string | null;
   entityId?: string | null;
+  before?: unknown;
+  after?: unknown;
   metadata?: Record<string, unknown> | null;
   ip?: string | null;
   userAgent?: string | null;
@@ -15,7 +18,7 @@ export interface AuditEvent {
 }
 
 export interface AuditRecorder {
-  record(event: AuditEvent, tx?: Prisma.TransactionClient): Promise<void>;
+  record(event: AuditEvent, tx?: Prisma.TransactionClient): Promise<AuditLog>;
 }
 
 export const AUDIT_RECORDER = 'AUDIT_RECORDER';
